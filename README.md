@@ -6,15 +6,15 @@ A personal AI health coach that pulls your real Garmin data and lets you have a 
 
 ## What it does
 
-On startup, the app connects to your Garmin Connect account, fetches the last 7 days of health data, and displays a summary. It then opens a chat session where Claude acts as your personal coach with full context of your metrics.
+On startup, the app connects to your Garmin Connect account, fetches your health data, and opens a browser-based chat interface. Claude acts as your personal coach with full context of your metrics. The sidebar shows a live, structured view of your data while you chat.
 
 **Data fetched from Garmin Connect:**
-- Daily steps, total and active calories
+- Daily steps, total and active calories, distance
 - Average and max stress levels
 - Body battery (most recent value per day)
 - Resting heart rate
-- Sleep breakdown — total, deep, REM, light, awake time, and sleep score
-- Last 10 activities — type, duration, distance, average and max HR, calories
+- Sleep breakdown — total, deep, REM, light, and sleep score
+- Recent activities — type, duration, distance, average HR, calories
 
 **What you can ask:**
 - *"How has my sleep been this week?"*
@@ -73,23 +73,41 @@ pip install -r requirements.txt
 ### 4. Run the app
 
 ```bash
-python main.py
+python server.py
 ```
 
-On first launch, a setup wizard will appear and ask for your Garmin email, password (entered twice to catch typos), and Anthropic API key. All three are saved to your OS keychain — you won't be asked again on future runs.
+The browser opens automatically at `http://localhost:8000`. On first launch, you'll be taken to the Settings page to enter your Garmin credentials and Anthropic API key. Everything is saved to your OS keychain — you won't be asked again on future runs.
+
+**CLI mode** (no browser, terminal-only):
+```bash
+python main.py
+```
 
 ---
 
 ## Usage
 
+### Web interface (recommended)
+
+| Element | What it does |
+|---|---|
+| Sidebar | Live structured view of your Garmin data — daily stats, sleep, activities |
+| Chat panel | Ask Claude anything about your health data; responses stream in real time |
+| Refresh data | Re-fetch Garmin data without restarting the server |
+| Reset conversation | Clear chat history while keeping your Garmin data context |
+| Settings | Update credentials or change data sync preferences |
+
+### CLI commands
+
 ```bash
-python main.py                    # Normal run — fetch data and start coaching
+python server.py                  # Start the web app (recommended)
+python main.py                    # CLI mode — terminal chat loop
 python main.py --setup            # Update or rotate credentials
 python main.py --status           # Check which credentials are stored
 python main.py --clear-credentials  # Remove all stored credentials
 ```
 
-**In-session commands:**
+**In-session CLI commands:**
 
 | Type | Effect |
 |---|---|
@@ -100,15 +118,38 @@ python main.py --clear-credentials  # Remove all stored credentials
 
 ---
 
+## Data Preferences
+
+In the web UI, go to **Settings → Data Preferences** to configure:
+
+- **Time range** — 7, 14, or 30 days of history
+- **Daily Stats** — toggle the whole section and individual metrics (steps, calories, stress, body battery, resting HR, distance)
+- **Sleep** — toggle the whole section and individual metrics (total duration, deep, REM, light sleep, sleep score)
+- **Activities** — toggle the whole section and choose how many recent activities to include (5, 10, or 20)
+
+Changes take effect immediately — the app re-fetches your data and rebuilds the coach's context after saving. Disabled categories are skipped at the API level (fewer calls), while disabled individual metrics are omitted from Claude's context but still visible in the sidebar.
+
+Preferences are stored in `settings.json` in the project directory (excluded from Git).
+
+---
+
 ## Project structure
 
 ```
 garmin-health-coach/
-├── main.py                 # Entry point — orchestrates startup and chat loop
-├── garmin_client.py        # Garmin Connect auth, data fetching, and formatting
-├── claude_client.py        # Claude API wrapper with conversation history
+├── server.py               # Web entry point — FastAPI app, all routes
+├── main.py                 # CLI entry point — terminal chat loop
+├── garmin_client.py        # Garmin Connect auth, data fetching, formatting
+├── claude_client.py        # Claude API wrapper with streaming and history
 ├── credentials_manager.py  # OS keychain read/write via the keyring library
+├── settings_manager.py     # Data sync preferences stored in settings.json
 ├── setup_ui.py             # Interactive credential setup wizard (rich + getpass)
+├── templates/
+│   ├── index.html          # Main chat UI — split panel with sidebar + chat
+│   └── settings.html       # Settings page — credentials and data preferences
+├── static/
+│   ├── style.css           # App styles
+│   └── app.js              # SSE streaming consumer and chat logic
 ├── requirements.txt
 ├── .env.example            # Reference for environment variable names (optional fallback)
 ├── .gitignore
@@ -134,13 +175,13 @@ If your Garmin account has 2FA enabled, you will be prompted to enter your code 
 ## Troubleshooting
 
 **401 Unauthorized from Garmin**
-Your email or password is incorrect. Run `python main.py --setup` to re-enter them. The password field asks for confirmation to prevent typos.
+Your email or password is incorrect. Go to Settings in the web UI (or run `python main.py --setup`) to re-enter them. The password field asks for confirmation to prevent typos.
 
 **Anthropic API errors**
 Check that your API key is valid and has available credits at [console.anthropic.com](https://console.anthropic.com).
 
 **Missing data fields**
-Not all Garmin devices record all metrics. Fields that are unavailable show as `[no data]` and are simply omitted from Claude's context — they don't cause errors.
+Not all Garmin devices record all metrics. Fields that are unavailable show as `[no data]` in the sidebar and are omitted from Claude's context — they don't cause errors.
 
 **Garmin session expired**
 The `.garth_session/` folder holds OAuth tokens that can expire. If login fails despite correct credentials, delete that folder and run the app again to trigger a fresh login.
@@ -150,17 +191,18 @@ The `.garth_session/` folder holds OAuth tokens that can expire. If login fails 
 Remove-Item -Recurse -Force .garth_session
 ```
 
+**Port 8000 already in use**
+Another process is using port 8000. Either stop that process or edit `server.py` to use a different port (`port=8001`).
+
 ---
 
 ## What's coming
 
 See [ROADMAP.md](ROADMAP.md) for the full list. The main planned additions are:
 
-**Proper UI** — The CLI is functional but not ideal for daily use. The plan is to move to either a desktop app or a local web app with a proper chat interface.
-
 **MacroFactor nutrition integration** — Connect your food log data so Claude can coach across the full picture: training, recovery, and fueling. MacroFactor doesn't have a public API, but supports CSV export which the app will be able to read.
 
-**Configurable data scope** — Choose which Garmin metrics to import and over what time range (7, 14, 30 days, or custom). Useful for focusing on specific aspects of health or for devices that don't support every metric.
+**Claude Skills** — Define and invoke pre-built coaching skills directly in the chat (e.g. `/weekly-report`, `/training-plan`, `/sleep-analysis`). Reusable prompt templates that unlock structured, deeper analysis on demand.
 
 ---
 
@@ -169,7 +211,11 @@ See [ROADMAP.md](ROADMAP.md) for the full list. The main planned additions are:
 | Package | Purpose |
 |---|---|
 | `garminconnect` | Garmin Connect API client |
-| `anthropic` | Claude API client |
+| `anthropic` | Claude API client (sync + async) |
+| `fastapi` | Web framework for the browser UI |
+| `uvicorn` | ASGI server that runs FastAPI |
+| `jinja2` | HTML templating for server-rendered pages |
+| `python-multipart` | Form data parsing for FastAPI |
 | `keyring` | Secure OS keychain storage |
-| `rich` | Terminal formatting for the setup wizard |
+| `rich` | Terminal formatting for the CLI setup wizard |
 | `python-dotenv` | Optional `.env` file fallback |
