@@ -37,8 +37,10 @@
         <div class="banner banner-error">✗ {{ connection_error }}</div>
       {% endif %}
 
-      <!-- Error from form validation -->
-      {% if error == "passwords_mismatch" %}
+      <!-- Success / error banners from form submission -->
+      {% if success == "data_saved" %}
+        <div class="banner banner-success">✓ Data preferences saved and re-synced.</div>
+      {% elif error == "passwords_mismatch" %}
         <div class="banner banner-error">✗ Passwords don't match — please try again.</div>
       {% elif error == "missing_fields" %}
         <div class="banner banner-error">✗ All fields are required.</div>
@@ -121,7 +123,115 @@
 
       </form>
     </div>
+
+    <!-- ── Data Preferences card ──────────────────────────────────────── -->
+    <div class="settings-card">
+
+      <h1 class="settings-title">Data Preferences</h1>
+      <p class="settings-subtitle">
+        Choose which Garmin data is synced and shown to the coach. Changes take effect immediately after saving.
+      </p>
+
+      <form method="POST" action="/api/data-settings" class="settings-form">
+
+        <!-- Time range -->
+        <div class="form-section">
+          <div class="form-section-title">Time Range</div>
+          <div class="form-group">
+            <label for="days_back">Days of history to sync</label>
+            <select id="days_back" name="days_back" class="form-select">
+              <option value="7"  {% if data_settings.days_back == 7  %}selected{% endif %}>7 days</option>
+              <option value="14" {% if data_settings.days_back == 14 %}selected{% endif %}>14 days</option>
+              <option value="30" {% if data_settings.days_back == 30 %}selected{% endif %}>30 days</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Daily Stats -->
+        <div class="form-section">
+          <div class="form-section-title">
+            <label class="category-label">
+              <input type="checkbox" name="daily_stats_enabled" class="category-check"
+                     id="daily_stats_enabled"
+                     {% if data_settings.daily_stats_enabled %}checked{% endif %}>
+              Daily Stats
+            </label>
+          </div>
+          <div class="metric-grid" data-parent="daily_stats_enabled">
+            <label class="metric-label"><input type="checkbox" name="metric_steps"           {% if data_settings.metric_steps           %}checked{% endif %}> Steps</label>
+            <label class="metric-label"><input type="checkbox" name="metric_calories_total"  {% if data_settings.metric_calories_total  %}checked{% endif %}> Total Calories</label>
+            <label class="metric-label"><input type="checkbox" name="metric_calories_active" {% if data_settings.metric_calories_active %}checked{% endif %}> Active Calories</label>
+            <label class="metric-label"><input type="checkbox" name="metric_stress"          {% if data_settings.metric_stress          %}checked{% endif %}> Stress Level</label>
+            <label class="metric-label"><input type="checkbox" name="metric_body_battery"    {% if data_settings.metric_body_battery    %}checked{% endif %}> Body Battery</label>
+            <label class="metric-label"><input type="checkbox" name="metric_resting_hr"      {% if data_settings.metric_resting_hr      %}checked{% endif %}> Resting Heart Rate</label>
+            <label class="metric-label"><input type="checkbox" name="metric_distance"        {% if data_settings.metric_distance        %}checked{% endif %}> Distance</label>
+          </div>
+        </div>
+
+        <!-- Sleep -->
+        <div class="form-section">
+          <div class="form-section-title">
+            <label class="category-label">
+              <input type="checkbox" name="sleep_enabled" class="category-check"
+                     id="sleep_enabled"
+                     {% if data_settings.sleep_enabled %}checked{% endif %}>
+              Sleep
+            </label>
+          </div>
+          <div class="metric-grid" data-parent="sleep_enabled">
+            <label class="metric-label"><input type="checkbox" name="metric_sleep_total" {% if data_settings.metric_sleep_total %}checked{% endif %}> Total Duration</label>
+            <label class="metric-label"><input type="checkbox" name="metric_sleep_deep"  {% if data_settings.metric_sleep_deep  %}checked{% endif %}> Deep Sleep</label>
+            <label class="metric-label"><input type="checkbox" name="metric_sleep_light" {% if data_settings.metric_sleep_light %}checked{% endif %}> Light Sleep</label>
+            <label class="metric-label"><input type="checkbox" name="metric_sleep_rem"   {% if data_settings.metric_sleep_rem   %}checked{% endif %}> REM Sleep</label>
+            <label class="metric-label"><input type="checkbox" name="metric_sleep_score" {% if data_settings.metric_sleep_score %}checked{% endif %}> Sleep Score</label>
+          </div>
+        </div>
+
+        <!-- Activities -->
+        <div class="form-section">
+          <div class="form-section-title">
+            <label class="category-label">
+              <input type="checkbox" name="activities_enabled" class="category-check"
+                     id="activities_enabled"
+                     {% if data_settings.activities_enabled %}checked{% endif %}>
+              Activities
+            </label>
+          </div>
+          <div class="metric-grid" data-parent="activities_enabled">
+            <div class="form-group" style="margin: 0;">
+              <label for="activity_count">Recent activities to include</label>
+              <select id="activity_count" name="activity_count" class="form-select" style="max-width: 160px;">
+                <option value="5"  {% if data_settings.activity_count == 5  %}selected{% endif %}>Last 5</option>
+                <option value="10" {% if data_settings.activity_count == 10 %}selected{% endif %}>Last 10</option>
+                <option value="20" {% if data_settings.activity_count == 20 %}selected{% endif %}>Last 20</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-primary">Save & Re-sync</button>
+
+      </form>
+    </div>
+
   </div>
+
+  <script>
+    // Dim child metrics when a category toggle is unchecked
+    document.querySelectorAll(".category-check").forEach(function(toggle) {
+      function update() {
+        var grid = document.querySelector("[data-parent='" + toggle.id + "']");
+        if (grid) {
+          grid.style.opacity = toggle.checked ? "1" : "0.35";
+          grid.querySelectorAll("input, select").forEach(function(el) {
+            el.disabled = !toggle.checked;
+          });
+        }
+      }
+      update();
+      toggle.addEventListener("change", update);
+    });
+  </script>
 
 </body>
 </html>

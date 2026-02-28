@@ -31,6 +31,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 
 import credentials_manager as cm
+import settings_manager as sm
 from garmin_client import get_garmin_client, fetch_health_data, format_health_summary
 from claude_client import ClaudeCoach
 
@@ -41,6 +42,7 @@ from claude_client import ClaudeCoach
 
 coach: ClaudeCoach | None = None
 health_summary: str | None = None
+health_data: dict | None = None
 garmin_connected: bool = False
 connection_error: str | None = None
 
@@ -55,7 +57,7 @@ async def _connect() -> None:
     Updates module-level state. Never raises — errors are stored in
     connection_error so the UI can display them gracefully.
     """
-    global coach, health_summary, garmin_connected, connection_error
+    global coach, health_summary, health_data, garmin_connected, connection_error
 
     # Keychain → env var fallback, then load .env for any remaining gaps
     cm.inject_into_env()
@@ -71,9 +73,11 @@ async def _connect() -> None:
 
     try:
         # Garmin auth and data fetching are blocking — run in thread pool
+        settings = sm.load_settings()
         garmin = await asyncio.to_thread(get_garmin_client, email, password)
-        health_data = await asyncio.to_thread(fetch_health_data, garmin)
-        health_summary = format_health_summary(health_data)
+        raw = await asyncio.to_thread(fetch_health_data, garmin, settings)
+        health_data = raw
+        health_summary = format_health_summary(raw, settings)
         coach = ClaudeCoach(health_summary=health_summary)
         garmin_connected = True
         connection_error = None
@@ -103,6 +107,43 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
 
+# ── Jinja2 template filters ───────────────────────────────────────────────────
+
+def _fmt_date(date_str: str) -> str:
+    """YYYY-MM-DD → 'Today', 'Yesterday', or 'Mon, Feb 28'."""
+    from datetime import datetime, date
+    try:
+        d = datetime.strptime(date_str, "%Y-%m-%d").date()
+        delta = (date.today() - d).days
+        if delta == 0:
+            return "Today"
+        if delta == 1:
+            return "Yesterday"
+        return d.strftime("%a, %b %d")
+    except Exception:
+        return date_str
+
+def _thousands(n) -> str:
+    return f"{int(n):,}" if n is not None else "—"
+
+def _hm(seconds) -> str:
+    """Seconds → '7h 22m'."""
+    if not seconds:
+        return "—"
+    return f"{int(seconds) // 3600}h {(int(seconds) % 3600) // 60}m"
+
+def _dur(seconds) -> str:
+    """Seconds → '45:23' (mm:ss)."""
+    if not seconds:
+        return "—"
+    return f"{int(seconds) // 60}:{int(seconds) % 60:02d}"
+
+templates.env.filters["fmt_date"]  = _fmt_date
+templates.env.filters["thousands"] = _thousands
+templates.env.filters["hm"]        = _hm
+templates.env.filters["dur"]       = _dur
+
+
 # ---------------------------------------------------------------------------
 # Pages
 # ---------------------------------------------------------------------------
@@ -114,6 +155,7 @@ async def index(request: Request):
     return templates.TemplateResponse("index.html", {
         "request": request,
         "health_summary": health_summary,
+        "health_data": health_data,
     })
 
 
@@ -129,6 +171,7 @@ async def settings_page(request: Request, error: str = "", success: str = ""):
         "connection_error": connection_error,
         "error": error,
         "success": success,
+        "data_settings": sm.load_settings(),
     })
 
 
@@ -218,6 +261,41 @@ async def api_save_credentials(
             f"/settings?error={connection_error or 'connection_failed'}",
             status_code=303,
         )
+
+
+@app.post("/api/data-settings")
+async def api_save_data_settings(request: Request):
+    """Save data sync preferences and re-fetch Garmin data with the new config."""
+    form = await request.form()
+
+    # Checkboxes are only present in form data when checked; absence means False
+    settings = {
+        "days_back": int(form.get("days_back", 7)),
+        "daily_stats_enabled": "daily_stats_enabled" in form,
+        "sleep_enabled": "sleep_enabled" in form,
+        "activities_enabled": "activities_enabled" in form,
+        "activity_count": int(form.get("activity_count", 10)),
+        "metric_steps": "metric_steps" in form,
+        "metric_calories_total": "metric_calories_total" in form,
+        "metric_calories_active": "metric_calories_active" in form,
+        "metric_stress": "metric_stress" in form,
+        "metric_body_battery": "metric_body_battery" in form,
+        "metric_resting_hr": "metric_resting_hr" in form,
+        "metric_distance": "metric_distance" in form,
+        "metric_sleep_total": "metric_sleep_total" in form,
+        "metric_sleep_deep": "metric_sleep_deep" in form,
+        "metric_sleep_light": "metric_sleep_light" in form,
+        "metric_sleep_rem": "metric_sleep_rem" in form,
+        "metric_sleep_score": "metric_sleep_score" in form,
+    }
+
+    sm.save_settings(settings)
+
+    # Re-fetch Garmin data with the new configuration if we're connected
+    if garmin_connected:
+        await _connect()
+
+    return RedirectResponse("/settings?success=data_saved", status_code=303)
 
 
 # ---------------------------------------------------------------------------

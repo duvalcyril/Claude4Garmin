@@ -79,7 +79,7 @@ html, body {
 }
 
 .sidebar-header {
-  padding: 14px 16px 10px;
+  padding: 12px 16px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: .06em;
@@ -87,18 +87,99 @@ html, body {
   color: var(--muted);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
-.health-data {
-  font-family: "Menlo", "Consolas", "Courier New", monospace;
-  font-size: 11.5px;
-  line-height: 1.65;
-  color: var(--text);
-  padding: 14px 16px;
-  overflow-y: auto;
+.sidebar-fetch-date {
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--muted);
+  opacity: .7;
+}
+
+.sidebar-body {
   flex: 1;
-  white-space: pre-wrap;
-  word-break: break-word;
+  overflow-y: auto;
+}
+
+/* ── Data sections ──────────────────────────────────────────────── */
+.data-section {
+  border-bottom: 1px solid var(--border);
+}
+
+.data-section-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 10px 16px 6px;
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.day-card {
+  padding: 8px 16px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.day-card:last-child { border-bottom: none; }
+
+.day-date {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 5px;
+}
+
+.day-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.metric-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.metric-label { color: var(--muted); }
+
+.metric-value {
+  color: var(--text);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.activity-card {
+  padding: 8px 16px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.activity-card:last-child { border-bottom: none; }
+
+.activity-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.activity-meta,
+.activity-stats {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.5;
 }
 
 /* ── Chat panel ───────────────────────────────────────────────────── */
@@ -243,7 +324,9 @@ html, body {
   min-height: calc(100vh - var(--header-h));
   padding-top: calc(var(--header-h) + 40px);
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
   padding-bottom: 60px;
 }
 
@@ -315,3 +398,62 @@ html, body {
   margin-top: 4px;
 }
 .btn-primary:hover { background: var(--accent-hover); }
+
+/* ── Data preferences form additions ─────────────────────────────── */
+.form-select {
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  color: var(--text);
+  background: var(--surface);
+  transition: border-color .15s;
+  cursor: pointer;
+}
+.form-select:focus { border-color: var(--accent); }
+
+/* Category header toggle (checkbox + label inline in section title) */
+.category-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.category-label input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* Grid of metric checkboxes */
+.metric-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 16px;
+  padding-left: 4px;
+  transition: opacity .2s;
+}
+
+.metric-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+.metric-label input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  flex-shrink: 0;
+}

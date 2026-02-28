@@ -27,8 +27,136 @@
 
     <!-- Sidebar: health data -->
     <aside class="sidebar">
-      <div class="sidebar-header">Health Summary</div>
-      <pre class="health-data">{{ health_summary }}</pre>
+      <div class="sidebar-header">
+        Health Summary
+        {% if health_data %}<span class="sidebar-fetch-date">{{ health_data.fetch_date | fmt_date }}</span>{% endif %}
+      </div>
+
+      <div class="sidebar-body">
+
+        <!-- ── Daily Stats ──────────────────────────────────────────── -->
+        {% if health_data and health_data.daily_stats %}
+        <div class="data-section">
+          <div class="data-section-title">Daily Stats</div>
+          {% for day in health_data.daily_stats %}
+            {% if 'error' not in day %}
+            <div class="day-card">
+              <div class="day-date">{{ day.date | fmt_date }}</div>
+              <div class="day-metrics">
+                {% if day.steps is not none %}
+                <div class="metric-row">
+                  <span class="metric-label">Steps</span>
+                  <span class="metric-value">{{ day.steps | thousands }}</span>
+                </div>
+                {% endif %}
+                {% if day.calories_total is not none %}
+                <div class="metric-row">
+                  <span class="metric-label">Calories</span>
+                  <span class="metric-value">{{ day.calories_total | thousands }} kcal</span>
+                </div>
+                {% endif %}
+                {% if day.stress_avg is not none %}
+                <div class="metric-row">
+                  <span class="metric-label">Stress</span>
+                  <span class="metric-value">{{ day.stress_avg }}/100</span>
+                </div>
+                {% endif %}
+                {% if day.body_battery is not none %}
+                <div class="metric-row">
+                  <span class="metric-label">Body Battery</span>
+                  <span class="metric-value">{{ day.body_battery }}%</span>
+                </div>
+                {% endif %}
+                {% if day.resting_hr is not none %}
+                <div class="metric-row">
+                  <span class="metric-label">Resting HR</span>
+                  <span class="metric-value">{{ day.resting_hr }} bpm</span>
+                </div>
+                {% endif %}
+                {% if day.distance_m is not none %}
+                <div class="metric-row">
+                  <span class="metric-label">Distance</span>
+                  <span class="metric-value">{{ (day.distance_m / 1000) | round(1) }} km</span>
+                </div>
+                {% endif %}
+              </div>
+            </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- ── Sleep ───────────────────────────────────────────────── -->
+        {% if health_data and health_data.sleep %}
+        <div class="data-section">
+          <div class="data-section-title">Sleep</div>
+          {% for entry in health_data.sleep %}
+            {% if 'error' not in entry and entry.total_seconds %}
+            <div class="day-card">
+              <div class="day-date">{{ entry.date | fmt_date }}</div>
+              <div class="day-metrics">
+                {% if entry.total_seconds is not none %}
+                <div class="metric-row">
+                  <span class="metric-label">Total</span>
+                  <span class="metric-value">{{ entry.total_seconds | hm }}</span>
+                </div>
+                {% endif %}
+                {% if entry.deep_seconds %}
+                <div class="metric-row">
+                  <span class="metric-label">Deep</span>
+                  <span class="metric-value">{{ entry.deep_seconds | hm }}</span>
+                </div>
+                {% endif %}
+                {% if entry.rem_seconds %}
+                <div class="metric-row">
+                  <span class="metric-label">REM</span>
+                  <span class="metric-value">{{ entry.rem_seconds | hm }}</span>
+                </div>
+                {% endif %}
+                {% if entry.light_seconds %}
+                <div class="metric-row">
+                  <span class="metric-label">Light</span>
+                  <span class="metric-value">{{ entry.light_seconds | hm }}</span>
+                </div>
+                {% endif %}
+                {% if entry.score is not none %}
+                <div class="metric-row">
+                  <span class="metric-label">Score</span>
+                  <span class="metric-value">{{ entry.score }}/100</span>
+                </div>
+                {% endif %}
+              </div>
+            </div>
+            {% endif %}
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- ── Activities ──────────────────────────────────────────── -->
+        {% if health_data and health_data.activities %}
+        <div class="data-section">
+          <div class="data-section-title">Activities</div>
+          {% for act in health_data.activities %}
+          <div class="activity-card">
+            <div class="activity-name">{{ act.name or act.type or "Activity" }}</div>
+            <div class="activity-meta">
+              {%- if act.date %}{{ act.date | fmt_date }}{% endif %}
+              {%- if act.duration_seconds %} &middot; {{ act.duration_seconds | dur }}{% endif %}
+              {%- if act.distance_meters %} &middot; {{ (act.distance_meters / 1000) | round(1) }} km{% endif %}
+            </div>
+            {% if act.avg_hr or act.calories %}
+            <div class="activity-stats">
+              {%- if act.avg_hr %}avg HR {{ act.avg_hr | int }} bpm{% endif %}
+              {%- if act.avg_hr and act.calories %} &middot; {% endif %}
+              {%- if act.calories %}{{ act.calories | int }} kcal{% endif %}
+            </div>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+      </div>
     </aside>
 
     <!-- Chat panel -->
