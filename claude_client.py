@@ -9,7 +9,7 @@ Key design decisions:
 - Model and token cap are module-level constants for easy tuning.
 """
 
-from anthropic import Anthropic
+from anthropic import Anthropic, AsyncAnthropic
 
 MODEL = "claude-sonnet-4-6"
 
@@ -27,6 +27,7 @@ class ClaudeCoach:
 
     def __init__(self, health_summary: str):
         self.client = Anthropic()
+        self.async_client = AsyncAnthropic()
         self.history: list[dict] = []
         self.system_prompt = self._build_system_prompt(health_summary)
 
@@ -69,7 +70,42 @@ Use this data to answer questions and give personalized recommendations."""
 
         return reply
 
+    def chat_stream(self, user_message: str):
+        """
+        Sync generator that yields text chunks as Claude produces them.
+        Used by the CLI (main.py). Updates history when complete.
+        """
+        self.history.append({"role": "user", "content": user_message})
+        full_reply = ""
+        with self.client.messages.stream(
+            model=MODEL,
+            max_tokens=MAX_TOKENS,
+            system=self.system_prompt,
+            messages=self.history,
+        ) as stream:
+            for chunk in stream.text_stream:
+                full_reply += chunk
+                yield chunk
+        self.history.append({"role": "assistant", "content": full_reply})
+
+    async def chat_stream_async(self, user_message: str):
+        """
+        Async generator that yields text chunks as Claude produces them.
+        Used by the web server (server.py) via SSE. Updates history when complete.
+        """
+        self.history.append({"role": "user", "content": user_message})
+        full_reply = ""
+        async with self.async_client.messages.stream(
+            model=MODEL,
+            max_tokens=MAX_TOKENS,
+            system=self.system_prompt,
+            messages=self.history,
+        ) as stream:
+            async for chunk in stream.text_stream:
+                full_reply += chunk
+                yield chunk
+        self.history.append({"role": "assistant", "content": full_reply})
+
     def reset_history(self) -> None:
         """Clear conversation history while keeping the Garmin data context."""
         self.history = []
-        print("Conversation history cleared.")

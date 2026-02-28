@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Garmin Health Coach</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <!-- marked.js for rendering Claude's markdown responses -->
+  <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
+</head>
+<body>
+
+  <!-- ── Header ─────────────────────────────────────────────────────── -->
+  <header class="header">
+    <div class="header-left">
+      <span class="header-icon">❤</span>
+      <span class="header-title">Garmin Health Coach</span>
+    </div>
+    <div class="header-right">
+      <button class="btn-ghost" id="btn-refresh" title="Re-fetch Garmin data">↺ Refresh data</button>
+      <a href="/settings" class="btn-ghost">⚙ Settings</a>
+    </div>
+  </header>
+
+  <!-- ── Main layout ────────────────────────────────────────────────── -->
+  <div class="layout">
+
+    <!-- Sidebar: health data -->
+    <aside class="sidebar">
+      <div class="sidebar-header">Health Summary</div>
+      <pre class="health-data">{{ health_summary }}</pre>
+    </aside>
+
+    <!-- Chat panel -->
+    <main class="chat-panel">
+
+      <!-- Message list -->
+      <div class="messages" id="messages">
+        <div class="message coach">
+          <div class="bubble">
+            <p>Hello! I've reviewed your Garmin data for the past 7 days. Ask me anything about your activity, sleep, stress, or recovery — I'll give you specific, actionable insights.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Input area -->
+      <div class="input-area">
+        <div class="input-row">
+          <textarea
+            id="msg-input"
+            class="msg-input"
+            placeholder="Ask your coach something..."
+            rows="1"
+            autofocus
+          ></textarea>
+          <button class="btn-send" id="btn-send">Send</button>
+        </div>
+        <div class="input-actions">
+          <button class="btn-link" id="btn-reset">↺ Reset conversation</button>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

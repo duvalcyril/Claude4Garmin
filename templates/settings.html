@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Settings — Garmin Health Coach</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+  <!-- ── Header ─────────────────────────────────────────────────────── -->
+  <header class="header">
+    <div class="header-left">
+      <span class="header-icon">❤</span>
+      <span class="header-title">Garmin Health Coach</span>
+    </div>
+    <div class="header-right">
+      {% if garmin_connected %}
+        <a href="/" class="btn-ghost">← Back to chat</a>
+      {% endif %}
+    </div>
+  </header>
+
+  <!-- ── Settings card ──────────────────────────────────────────────── -->
+  <div class="settings-page">
+    <div class="settings-card">
+
+      <h1 class="settings-title">Connection Settings</h1>
+      <p class="settings-subtitle">
+        Credentials are stored in your OS keychain — never written to disk as plain text.
+      </p>
+
+      <!-- Status banner -->
+      {% if garmin_connected %}
+        <div class="banner banner-success">✓ Connected to Garmin Connect</div>
+      {% elif connection_error %}
+        <div class="banner banner-error">✗ {{ connection_error }}</div>
+      {% endif %}
+
+      <!-- Error from form validation -->
+      {% if error == "passwords_mismatch" %}
+        <div class="banner banner-error">✗ Passwords don't match — please try again.</div>
+      {% elif error == "missing_fields" %}
+        <div class="banner banner-error">✗ All fields are required.</div>
+      {% elif error %}
+        <div class="banner banner-error">✗ {{ error }}</div>
+      {% endif %}
+
+      <form method="POST" action="/api/credentials" class="settings-form">
+
+        <!-- Garmin Connect section -->
+        <div class="form-section">
+          <div class="form-section-title">Garmin Connect</div>
+
+          <div class="form-group">
+            <label for="garmin_email">Email</label>
+            <input
+              type="email"
+              id="garmin_email"
+              name="garmin_email"
+              value="{{ garmin_email }}"
+              placeholder="your@email.com"
+              required
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="garmin_password">
+              Password
+              {% if has_password %}
+                <span class="field-status field-set">● set</span>
+              {% else %}
+                <span class="field-status field-missing">● not set</span>
+              {% endif %}
+            </label>
+            <input
+              type="password"
+              id="garmin_password"
+              name="garmin_password"
+              placeholder="{% if has_password %}Leave blank to keep existing{% else %}Enter password{% endif %}"
+              autocomplete="new-password"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="garmin_password_confirm">Confirm Password</label>
+            <input
+              type="password"
+              id="garmin_password_confirm"
+              name="garmin_password_confirm"
+              placeholder="Re-enter password to confirm"
+              autocomplete="new-password"
+            />
+          </div>
+        </div>
+
+        <!-- Anthropic section -->
+        <div class="form-section">
+          <div class="form-section-title">Anthropic</div>
+
+          <div class="form-group">
+            <label for="anthropic_api_key">
+              API Key
+              {% if has_api_key %}
+                <span class="field-status field-set">● set</span>
+              {% else %}
+                <span class="field-status field-missing">● not set</span>
+              {% endif %}
+            </label>
+            <input
+              type="password"
+              id="anthropic_api_key"
+              name="anthropic_api_key"
+              placeholder="{% if has_api_key %}Leave blank to keep existing{% else %}sk-ant-...{% endif %}"
+              autocomplete="new-password"
+            />
+          </div>
+        </div>
+
+        <button type="submit" class="btn-primary">Save & Connect</button>
+
+      </form>
+    </div>
+  </div>
+
+</body>
+</html>
