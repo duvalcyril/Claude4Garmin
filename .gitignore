@@ -1,0 +1,14 @@
+# Garmin OAuth session tokens — treated like a password, never commit
+.garth_session/
+
+# .env file — only .env.example should be committed
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Claude Code internal files
+.claude/

@@ -1,0 +1,5 @@
+garminconnect>=0.2.19
+anthropic>=0.40.0
+python-dotenv>=1.0.0
+keyring>=25.0.0
+rich>=13.0.0
