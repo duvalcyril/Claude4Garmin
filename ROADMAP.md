@@ -22,6 +22,8 @@ A collection of planned improvements, in no particular order.
 
 **Body Composition** — Weight, body fat %, and muscle mass from a Garmin-compatible smart scale. Shown as a dedicated sidebar section (3 most recent readings). Category toggle and per-metric toggles in Data Preferences.
 
+**Daily Digest** — Morning email with yesterday's stats, sleep, HRV, readiness, training status, and a Claude-generated coaching recommendation. Sent via Gmail SMTP (app password). Scheduled via Windows Task Scheduler from the Settings page. Configurable recipient and send time. Test-send button for instant verification. All email errors logged to `digest.log`.
+
 ---
 
 ## Expanded Garmin data (remaining)
@@ -73,8 +75,6 @@ Things to figure out:
 
 ## Parking lot
 
-- **Daily digest mode**: run on a schedule (e.g. Task Scheduler / cron), generate a
-  morning summary, and send it via email or desktop notification
 - **Trend alerts**: flag when a metric crosses a threshold (e.g. resting HR up 5+ bpm
   for 3 days, sleep score below 60 two nights in a row)
 - **Conversation export**: save chat sessions to a markdown or PDF file

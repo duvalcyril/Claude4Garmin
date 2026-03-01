@@ -67,6 +67,10 @@ DEFAULTS: dict = {
     "metric_body_weight": True,
     "metric_body_fat": True,
     "metric_body_muscle": True,
+    # Daily Digest
+    "digest_enabled": False,
+    "digest_recipient": "",
+    "digest_send_time": "07:00",
 }
 
 

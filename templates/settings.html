@@ -40,6 +40,8 @@
       <!-- Success / error banners from form submission -->
       {% if success == "data_saved" %}
         <div class="banner banner-success">✓ Data preferences saved and re-synced.</div>
+      {% elif success == "digest_saved" %}
+        <div class="banner banner-success">✓ Digest settings saved and schedule updated.</div>
       {% elif error == "passwords_mismatch" %}
         <div class="banner banner-error">✗ Passwords don't match — please try again.</div>
       {% elif error == "missing_fields" %}
@@ -306,6 +308,98 @@
 
     </div>
 
+    <!-- ── Daily Digest card ──────────────────────────────────────────── -->
+    <div class="settings-card">
+
+      <h1 class="settings-title">Daily Digest</h1>
+      <p class="settings-subtitle">
+        Receive a morning email with yesterday's health stats and a coaching recommendation.
+        Requires a Gmail address with an
+        <a href="https://myaccount.google.com/apppasswords" target="_blank" style="color:var(--accent);">App Password</a> enabled.
+      </p>
+
+      <form method="POST" action="/api/digest-settings" class="settings-form">
+
+        <!-- Master toggle -->
+        <div class="form-section">
+          <label class="category-label" style="font-size:14px; font-weight:600; text-transform:none; letter-spacing:0; color:var(--text);">
+            <input type="checkbox" name="digest_enabled" id="digest_enabled"
+                   class="category-check"
+                   {% if data_settings.digest_enabled %}checked{% endif %}>
+            Enable Daily Digest
+          </label>
+        </div>
+
+        <!-- Collapsible body — dims via existing JS when toggle is off -->
+        <div data-parent="digest_enabled">
+
+          <div class="form-section">
+            <div class="form-section-title">Email Settings</div>
+
+            <div class="form-group">
+              <label for="digest_recipient">Recipient Email</label>
+              <input type="email" id="digest_recipient" name="digest_recipient"
+                     value="{{ data_settings.digest_recipient }}"
+                     placeholder="you@example.com" />
+            </div>
+
+            <div class="form-group">
+              <label for="digest_send_time">Send Time</label>
+              <input type="time" id="digest_send_time" name="digest_send_time"
+                     value="{{ data_settings.digest_send_time }}"
+                     style="max-width:140px;" />
+            </div>
+          </div>
+
+          <div class="form-section">
+            <div class="form-section-title">Gmail Sender</div>
+
+            <div class="form-group">
+              <label for="digest_gmail_sender">
+                Gmail Address
+                {% if has_digest_sender %}
+                  <span class="field-status field-set">● set</span>
+                {% else %}
+                  <span class="field-status field-missing">● not set</span>
+                {% endif %}
+              </label>
+              <input type="email" id="digest_gmail_sender" name="digest_gmail_sender"
+                     placeholder="{% if has_digest_sender %}Leave blank to keep existing{% else %}sender@gmail.com{% endif %}"
+                     autocomplete="new-password" />
+            </div>
+
+            <div class="form-group">
+              <label for="digest_gmail_app_password">
+                App Password
+                {% if has_digest_app_password %}
+                  <span class="field-status field-set">● set</span>
+                {% else %}
+                  <span class="field-status field-missing">● not set</span>
+                {% endif %}
+              </label>
+              <input type="password" id="digest_gmail_app_password" name="digest_gmail_app_password"
+                     placeholder="{% if has_digest_app_password %}Leave blank to keep existing{% else %}xxxx xxxx xxxx xxxx{% endif %}"
+                     autocomplete="new-password" />
+              <p style="font-size:12px; color:var(--muted); margin-top:4px;">
+                Use a Google App Password, not your regular Gmail password.
+                <a href="https://myaccount.google.com/apppasswords" target="_blank"
+                   style="color:var(--accent);">Generate one here</a>.
+              </p>
+            </div>
+          </div>
+
+        </div><!-- /data-parent="digest_enabled" -->
+
+        <div style="display:flex; gap:10px; align-items:center; margin-top:4px;">
+          <button type="submit" class="btn-primary" style="flex:1;">Save Digest Settings</button>
+          <button type="button" id="digest-test-btn" class="btn-ghost"
+                  style="padding:11px 18px; font-size:14px; flex-shrink:0;">Send Test</button>
+        </div>
+        <p id="digest-test-status" style="font-size:13px; margin-top:8px; min-height:1.4em;"></p>
+
+      </form>
+    </div>
+
   </div>
 
   <script>
@@ -369,6 +463,34 @@
       var file = e.dataTransfer.files[0];
       if (file) uploadFile(file);
     });
+
+    // Daily Digest — test send button
+    var digestTestBtn    = document.getElementById("digest-test-btn");
+    var digestTestStatus = document.getElementById("digest-test-status");
+
+    if (digestTestBtn) {
+      digestTestBtn.addEventListener("click", async function() {
+        digestTestBtn.disabled = true;
+        digestTestStatus.textContent = "Sending\u2026";
+        digestTestStatus.style.color = "var(--muted)";
+        try {
+          var res  = await fetch("/api/digest-test", { method: "POST" });
+          var data = await res.json();
+          if (data.ok) {
+            digestTestStatus.textContent = "\u2713 Test email sent!";
+            digestTestStatus.style.color = "#065f46";
+          } else {
+            digestTestStatus.textContent = "\u2717 " + (data.error || "Send failed.");
+            digestTestStatus.style.color = "#7f1d1d";
+          }
+        } catch (e) {
+          digestTestStatus.textContent = "\u2717 Network error: " + e.message;
+          digestTestStatus.style.color = "#7f1d1d";
+        } finally {
+          digestTestBtn.disabled = false;
+        }
+      });
+    }
   </script>
 
 </body>

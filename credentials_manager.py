@@ -90,6 +90,15 @@ def delete_all_credentials() -> None:
         delete_credential(key)
 
 
+# Digest-specific credential keys — separate so they don't affect credentials_complete()
+DIGEST_CREDENTIAL_KEYS = ("digest_gmail_sender", "digest_gmail_app_password")
+
+
+def digest_credentials_complete() -> bool:
+    """Return True only if both Gmail digest credentials are present."""
+    return all(load_credential(k) for k in DIGEST_CREDENTIAL_KEYS)
+
+
 def inject_into_env() -> None:
     """
     Write all stored credentials into os.environ.

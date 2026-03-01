@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Your Health Digest</title>
+</head>
+<body style="margin:0; padding:0; background:#f1f5f9; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; -webkit-font-smoothing:antialiased;">
+
+  <!-- Outer wrapper -->
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f1f5f9;">
+    <tr>
+      <td align="center" style="padding:40px 16px;">
+
+        <!-- Card -->
+        <table width="540" cellpadding="0" cellspacing="0" border="0"
+               style="max-width:540px; width:100%; background:#ffffff; border-radius:12px; overflow:hidden; border:1px solid #e2e8f0; box-shadow:0 1px 3px rgba(0,0,0,.06);">
+
+          <!-- ── Header ───────────────────────────────────────────── -->
+          <tr>
+            <td style="background:#2563eb; padding:28px 32px;">
+              <p style="margin:0; color:#bfdbfe; font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase;">Garmin Health Coach</p>
+              <h1 style="margin:6px 0 4px; color:#ffffff; font-size:24px; font-weight:700; line-height:1.2;">Your Daily Digest</h1>
+              <p style="margin:0; color:#bfdbfe; font-size:14px;">{{ date_label }}</p>
+            </td>
+          </tr>
+
+          <!-- ── Daily Stats ──────────────────────────────────────── -->
+          <tr>
+            <td style="padding:28px 32px 0;">
+              <p style="margin:0 0 16px; font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#64748b;">Yesterday&rsquo;s Stats</p>
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  {% for m in stat_metrics %}
+                  <td align="center" style="padding:0 4px 20px;{% if not loop.last %} border-right:1px solid #e2e8f0;{% endif %}">
+                    <p style="margin:0; font-size:22px; font-weight:700; color:#1e293b; line-height:1;">{{ m.value }}</p>
+                    <p style="margin:5px 0 0; font-size:11px; color:#64748b; text-transform:uppercase; letter-spacing:.04em;">{{ m.label }}</p>
+                  </td>
+                  {% endfor %}
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- ── Recovery Row ─────────────────────────────────────── -->
+          <tr>
+            <td style="padding:0 32px 20px;">
+              <table width="100%" cellpadding="0" cellspacing="0" border="0"
+                     style="background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0; overflow:hidden;">
+                <tr>
+                  <td style="padding:14px 18px; border-right:1px solid #e2e8f0; width:33%;">
+                    <p style="margin:0; font-size:11px; color:#64748b; text-transform:uppercase; letter-spacing:.04em;">HRV</p>
+                    <p style="margin:3px 0 0; font-size:16px; font-weight:600; color:#1e293b; line-height:1.2;">{{ hrv_avg }}</p>
+                    <p style="margin:2px 0 0; font-size:11px; color:#64748b;">{{ hrv_status }}</p>
+                  </td>
+                  <td style="padding:14px 18px; border-right:1px solid #e2e8f0; width:33%;">
+                    <p style="margin:0; font-size:11px; color:#64748b; text-transform:uppercase; letter-spacing:.04em;">Readiness</p>
+                    <p style="margin:3px 0 0; font-size:16px; font-weight:600; color:#1e293b; line-height:1.2;">{{ readiness_score }}<span style="font-size:11px; color:#94a3b8;">/100</span></p>
+                  </td>
+                  <td style="padding:14px 18px; width:34%;">
+                    <p style="margin:0; font-size:11px; color:#64748b; text-transform:uppercase; letter-spacing:.04em;">Training Status</p>
+                    <p style="margin:3px 0 0; font-size:16px; font-weight:600; color:#1e293b; line-height:1.2;">{{ training_status }}</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- ── Sleep ────────────────────────────────────────────── -->
+          <tr>
+            <td style="padding:0 32px 24px;">
+              <p style="margin:0 0 14px; font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#64748b;">Sleep</p>
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="center" style="padding:0 4px; border-right:1px solid #e2e8f0;">
+                    <p style="margin:0; font-size:20px; font-weight:700; color:#1e293b; line-height:1;">{{ sleep_total }}</p>
+                    <p style="margin:5px 0 0; font-size:11px; color:#64748b; text-transform:uppercase; letter-spacing:.04em;">Total</p>
+                  </td>
+                  <td align="center" style="padding:0 4px; border-right:1px solid #e2e8f0;">
+                    <p style="margin:0; font-size:20px; font-weight:700; color:#1e293b; line-height:1;">{{ sleep_deep }}</p>
+                    <p style="margin:5px 0 0; font-size:11px; color:#64748b; text-transform:uppercase; letter-spacing:.04em;">Deep</p>
+                  </td>
+                  <td align="center" style="padding:0 4px; border-right:1px solid #e2e8f0;">
+                    <p style="margin:0; font-size:20px; font-weight:700; color:#1e293b; line-height:1;">{{ sleep_rem }}</p>
+                    <p style="margin:5px 0 0; font-size:11px; color:#64748b; text-transform:uppercase; letter-spacing:.04em;">REM</p>
+                  </td>
+                  <td align="center" style="padding:0 4px;">
+                    <p style="margin:0; font-size:20px; font-weight:700; color:#1e293b; line-height:1;">{{ sleep_score }}<span style="font-size:12px; color:#94a3b8;">/100</span></p>
+                    <p style="margin:5px 0 0; font-size:11px; color:#64748b; text-transform:uppercase; letter-spacing:.04em;">Score</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Divider -->
+          <tr>
+            <td style="padding:0 32px;">
+              <hr style="border:none; border-top:1px solid #e2e8f0; margin:0;" />
+            </td>
+          </tr>
+
+          <!-- ── Coach's Take ──────────────────────────────────────── -->
+          <tr>
+            <td style="padding:24px 32px;">
+              <p style="margin:0 0 12px; font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#2563eb;">Coach&rsquo;s Take</p>
+              <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td width="3" style="background:#2563eb; border-radius:2px;">&nbsp;</td>
+                  <td style="padding:2px 0 2px 16px;">
+                    <p style="margin:0; font-size:15px; color:#1e293b; line-height:1.65;">{{ coach_recommendation }}</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- ── Footer ───────────────────────────────────────────── -->
+          <tr>
+            <td style="padding:16px 32px; background:#f8fafc; border-top:1px solid #e2e8f0;">
+              <p style="margin:0; font-size:12px; color:#94a3b8; text-align:center;">
+                Garmin Health Coach
+                &nbsp;&middot;&nbsp;
+                <a href="http://localhost:8000/settings" style="color:#94a3b8; text-decoration:underline;">Manage digest settings</a>
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>

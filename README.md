@@ -153,12 +153,38 @@ Upload skills and personas from **Settings → Skills & Personas** (drag-and-dro
 
 ---
 
+## Daily Digest
+
+Enable a morning email that lands in your inbox every day with yesterday's key stats and a coaching take from Claude — no need to open the app.
+
+**What's in the digest:**
+- Steps, calories, body battery, resting HR
+- HRV (overnight average + status), Training Readiness score, Training Status label
+- Sleep breakdown — total, deep, REM, score
+- A short Claude-generated paragraph: how yesterday went and what to focus on today
+
+**Setup** (in Settings → Daily Digest):
+1. Enter your recipient email and preferred send time
+2. Enter a Gmail address to send from and a [Google App Password](https://myaccount.google.com/apppasswords) (not your regular Gmail password — generate one in Google account security settings)
+3. Click **Save Digest Settings** — the app registers a Windows Task Scheduler task automatically
+4. Use **Send Test** to verify the email arrives before the first scheduled run
+
+Errors are logged to `digest.log` in the project directory. You can also trigger a manual send from the command line:
+
+```bash
+python digest.py                    # sends for yesterday
+python digest.py --date 2026-03-01  # sends for a specific date
+```
+
+---
+
 ## Project structure
 
 ```
 garmin-health-coach/
 ├── server.py               # Web entry point — FastAPI app, all routes
 ├── main.py                 # CLI entry point — terminal chat loop
+├── digest.py               # Standalone daily digest emailer (Task Scheduler)
 ├── garmin_client.py        # Garmin Connect auth, data fetching, formatting
 ├── claude_client.py        # Claude API wrapper with streaming, history, personas
 ├── credentials_manager.py  # OS keychain read/write via the keyring library
@@ -167,12 +193,14 @@ garmin-health-coach/
 ├── setup_ui.py             # Interactive credential setup wizard (rich + getpass)
 ├── templates/
 │   ├── index.html          # Main chat UI — split panel with sidebar + chat
-│   └── settings.html       # Settings page — credentials, data prefs, skills
+│   ├── settings.html       # Settings page — credentials, data prefs, skills, digest
+│   └── digest_email.html   # HTML email template for the daily digest
 ├── static/
 │   ├── style.css           # App styles
 │   └── app.js              # SSE streaming consumer, chat logic, skill picker
 ├── skills/                 # Prompt skill JSON files
 ├── .claude/                # Persona .skill files (Claude ZIP format)
+├── digest.log              # Daily digest send log (auto-created)
 ├── requirements.txt
 ├── .env.example            # Reference for environment variable names (optional fallback)
 ├── .gitignore
@@ -214,6 +242,9 @@ The `.garth_session/` folder holds OAuth tokens that can expire. If login fails 
 Remove-Item -Recurse -Force .garth_session
 ```
 
+**Digest email not arriving**
+Check `digest.log` in the project directory. Common causes: Gmail App Password not set (2FA must be enabled on your Google account before App Passwords appear), recipient address missing, or the Task Scheduler task not registered. Use the **Send Test** button in Settings to diagnose without waiting for the scheduled time.
+
 **Port 8000 already in use**
 Another process is using port 8000. Either stop that process or edit `server.py` to use a different port (`port=8001`).
 
@@ -228,6 +259,8 @@ See [ROADMAP.md](ROADMAP.md) for the full list. The main planned additions are:
 **Race predictions & Cycling FTP** — Garmin's estimated race times (5k–marathon) and functional threshold power for deeper performance context.
 
 **MacroFactor nutrition integration** — Connect your food log data so Claude can coach across the full picture: training, recovery, and fueling. MacroFactor supports CSV export which the app will be able to read.
+
+**Trend alerts** — Flag when a metric crosses a threshold (e.g. resting HR up 5+ bpm for 3 consecutive days, sleep score below 60 two nights in a row).
 
 ---
 

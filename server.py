@@ -19,8 +19,11 @@ Run with:
 import asyncio
 import json
 import os
+import subprocess
+import sys
 import threading
 import webbrowser
+from pathlib import Path
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -146,6 +149,35 @@ templates.env.filters["dur"]       = _dur
 
 
 # ---------------------------------------------------------------------------
+# Digest — Task Scheduler helpers
+# ---------------------------------------------------------------------------
+
+DIGEST_TASK_NAME = "GarminHealthCoachDigest"
+_DIGEST_SCRIPT   = Path(__file__).parent / "digest.py"
+
+
+def _register_digest_task(send_time: str) -> None:
+    """Create or overwrite a daily Task Scheduler entry for the digest."""
+    tr = f'"{sys.executable}" "{_DIGEST_SCRIPT}"'
+    subprocess.run(
+        ["schtasks", "/Create", "/F",
+         "/TN", DIGEST_TASK_NAME,
+         "/TR", tr,
+         "/SC", "DAILY",
+         "/ST", send_time],
+        check=True, capture_output=True, text=True,
+    )
+
+
+def _unregister_digest_task() -> None:
+    """Remove the scheduled task. Silently ignores if it doesn't exist."""
+    subprocess.run(
+        ["schtasks", "/Delete", "/F", "/TN", DIGEST_TASK_NAME],
+        capture_output=True,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Pages
 # ---------------------------------------------------------------------------
 
@@ -174,6 +206,8 @@ async def settings_page(request: Request, error: str = "", success: str = ""):
         "success": success,
         "data_settings": sm.load_settings(),
         "skills": skm.load_skills(),
+        "has_digest_sender":       bool(cm.load_credential("digest_gmail_sender")),
+        "has_digest_app_password": bool(cm.load_credential("digest_gmail_app_password")),
     })
 
 
@@ -364,6 +398,50 @@ async def api_save_data_settings(request: Request):
         await _connect()
 
     return RedirectResponse("/settings?success=data_saved", status_code=303)
+
+
+@app.post("/api/digest-settings")
+async def api_save_digest_settings(request: Request):
+    """Save Daily Digest preferences and update the Windows Task Scheduler entry."""
+    form    = await request.form()
+    enabled = "digest_enabled" in form   # checkbox absent from POST = unchecked
+
+    settings = sm.load_settings()
+    settings["digest_enabled"]   = enabled
+    settings["digest_recipient"] = form.get("digest_recipient", "").strip()
+    settings["digest_send_time"] = form.get("digest_send_time", "07:00")
+    sm.save_settings(settings)
+
+    # Persist Gmail credentials only if new values were supplied
+    if form.get("digest_gmail_sender"):
+        cm.save_credential("digest_gmail_sender", form["digest_gmail_sender"])
+    if form.get("digest_gmail_app_password"):
+        cm.save_credential("digest_gmail_app_password", form["digest_gmail_app_password"])
+
+    # Register or remove the Task Scheduler task
+    try:
+        if enabled:
+            _register_digest_task(settings["digest_send_time"])
+        else:
+            _unregister_digest_task()
+    except subprocess.CalledProcessError as exc:
+        err = (exc.stderr or "schtasks command failed").strip()
+        return RedirectResponse(f"/settings?error={err}", status_code=303)
+
+    return RedirectResponse("/settings?success=digest_saved", status_code=303)
+
+
+@app.post("/api/digest-test")
+async def api_digest_test():
+    """Send a test digest email immediately, ignoring the digest_enabled toggle."""
+    from datetime import date, timedelta
+    from digest import run_digest   # lazy import — keeps errors scoped to this endpoint
+    try:
+        yesterday = date.today() - timedelta(days=1)
+        await asyncio.to_thread(run_digest, yesterday)
+        return JSONResponse({"ok": True})
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
 
 
 # ---------------------------------------------------------------------------
