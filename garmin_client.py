@@ -130,7 +130,12 @@ def _seconds_to_hm(seconds: Optional[int]) -> str:
 # Data fetching
 # ---------------------------------------------------------------------------
 
-def fetch_health_data(client: Garmin, settings: dict | None = None) -> dict:
+def fetch_health_data(
+    client: Garmin,
+    settings: dict | None = None,
+    specific_dates: list | None = None,
+    fetch_shared: bool = True,
+) -> dict:
     """
     Fetch health metrics from Garmin Connect.
 
@@ -143,9 +148,17 @@ def fetch_health_data(client: Garmin, settings: dict | None = None) -> dict:
       - training_status: single rolling label (Productive / Unproductive / etc.)
       - body_composition: weight, body fat %, muscle mass per day from scale
 
-    The `settings` dict controls which categories are fetched and how many days
-    of history are included. Each day's entry stores None for any metric the
-    device didn't record, rather than raising an exception.
+    Args:
+        client:         Authenticated Garmin client.
+        settings:       Controls which categories are fetched and how many days
+                        of history to include. Each day's entry stores None for
+                        any metric the device didn't record.
+        specific_dates: When provided, only fetch per-day data for these dates
+                        instead of the full days_back window. Used for incremental
+                        cache updates where only a few days need refreshing.
+        fetch_shared:   When False, skip activities, training_status, and
+                        body_composition (shared/rolling data that doesn't
+                        need updating if no per-day dates changed).
     """
     s = settings or {}
     days_back = int(s.get("days_back", DAYS_BACK))
@@ -159,7 +172,9 @@ def fetch_health_data(client: Garmin, settings: dict | None = None) -> dict:
     fetch_body = s.get("body_enabled", True)
 
     today = date.today()
-    date_range = [today - timedelta(days=i) for i in range(days_back)]
+    date_range = specific_dates if specific_dates is not None else [
+        today - timedelta(days=i) for i in range(days_back)
+    ]
 
     health_data: dict = {
         "fetch_date": today.isoformat(),
@@ -267,7 +282,7 @@ def fetch_health_data(client: Garmin, settings: dict | None = None) -> dict:
             health_data["training_readiness"].append(readiness)
 
     # --- Training Status (fetch once — rolling label, not per-day) ---
-    if fetch_status:
+    if fetch_status and fetch_shared:
         try:
             raw = client.get_training_status(today.isoformat())
             ts_map = _get(raw, "mostRecentTrainingStatus", "latestTrainingStatusData") or {}
@@ -309,7 +324,7 @@ def fetch_health_data(client: Garmin, settings: dict | None = None) -> dict:
             health_data["training_status"] = {"error": str(e)}
 
     # --- Recent activities (not day-by-day, just a flat list) ---
-    if fetch_activities:
+    if fetch_activities and fetch_shared:
         try:
             raw_acts = client.get_activities(0, activity_count)
             for act in raw_acts:
@@ -328,7 +343,7 @@ def fetch_health_data(client: Garmin, settings: dict | None = None) -> dict:
             health_data["activities_error"] = str(e)
 
     # --- Body composition (fetch entire range at once) ---
-    if fetch_body:
+    if fetch_body and fetch_shared:
         try:
             start_str = (today - timedelta(days=days_back)).isoformat()
             raw = client.get_body_composition(start_str, today.isoformat())

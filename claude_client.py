@@ -6,8 +6,14 @@ Key design decisions:
   Claude reference it throughout the conversation without it being re-sent.
 - Conversation history is stored as a plain list of {role, content} dicts —
   exactly what the Messages API expects — so follow-up questions work naturally.
+- When a history_file path is supplied (web UI), history is persisted to disk
+  and reloaded on the next startup so conversations survive server restarts.
+  digest.py and the CLI omit history_file and always start fresh.
 - Model and token cap are module-level constants for easy tuning.
 """
+
+import json
+from pathlib import Path
 
 from anthropic import Anthropic, AsyncAnthropic
 
@@ -23,15 +29,39 @@ class ClaudeCoach:
 
     The health summary is baked into the system prompt once at construction;
     all subsequent chat() calls append to a growing message history.
+
+    If history_file is provided, the conversation is persisted to disk and
+    reloaded on the next startup — so Claude remembers previous sessions.
     """
 
-    def __init__(self, health_summary: str):
+    def __init__(self, health_summary: str, history_file: Path | None = None):
         self.client = Anthropic()
         self.async_client = AsyncAnthropic()
-        self.history: list[dict] = []
+        self._history_file = history_file
+        self.history: list[dict] = self._load_history()
         self._base_system_prompt = self._build_system_prompt(health_summary)
         self._persona_content: str | None = None
         self.system_prompt = self._base_system_prompt
+
+    def _load_history(self) -> list[dict]:
+        """Load persisted conversation history from disk, or return an empty list."""
+        if self._history_file and self._history_file.exists():
+            try:
+                return json.loads(self._history_file.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        return []
+
+    def _save_history(self) -> None:
+        """Persist current conversation history to disk."""
+        if self._history_file:
+            try:
+                self._history_file.write_text(
+                    json.dumps(self.history, indent=2, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+            except Exception:
+                pass
 
     def _build_system_prompt(self, health_summary: str) -> str:
         return f"""You are a personal health and fitness coach with access to the user's recent Garmin wearable data.
@@ -84,10 +114,8 @@ Use this data to answer questions and give personalized recommendations."""
         )
 
         reply = response.content[0].text
-
-        # Store the assistant's reply so the next turn has full context
         self.history.append({"role": "assistant", "content": reply})
-
+        self._save_history()
         return reply
 
     def chat_stream(self, user_message: str):
@@ -107,6 +135,7 @@ Use this data to answer questions and give personalized recommendations."""
                 full_reply += chunk
                 yield chunk
         self.history.append({"role": "assistant", "content": full_reply})
+        self._save_history()
 
     async def chat_stream_async(self, user_message: str):
         """
@@ -125,7 +154,10 @@ Use this data to answer questions and give personalized recommendations."""
                 full_reply += chunk
                 yield chunk
         self.history.append({"role": "assistant", "content": full_reply})
+        self._save_history()
 
     def reset_history(self) -> None:
-        """Clear conversation history while keeping the Garmin data context."""
+        """Clear conversation history and remove the persisted history file."""
         self.history = []
+        if self._history_file and self._history_file.exists():
+            self._history_file.unlink(missing_ok=True)

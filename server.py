@@ -35,6 +35,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 
 import credentials_manager as cm
+import data_cache as dc
 import settings_manager as sm
 import skills_manager as skm
 from garmin_client import get_garmin_client, fetch_health_data, format_health_summary
@@ -79,11 +80,28 @@ async def _connect() -> None:
     try:
         # Garmin auth and data fetching are blocking — run in thread pool
         settings = sm.load_settings()
+        days_back = int(settings.get("days_back", 7))
+
+        # Incremental fetch: only hit the Garmin API for stale or missing dates
+        cache = dc.load_cache()
+        dates, fetch_shared = dc.plan_fetch(cache, days_back)
+
         garmin = await asyncio.to_thread(get_garmin_client, email, password)
-        raw = await asyncio.to_thread(fetch_health_data, garmin, settings)
+        raw = await asyncio.to_thread(
+            fetch_health_data, garmin, settings, dates, fetch_shared
+        )
+
+        # Merge fresh data into the cached baseline, then persist
+        if cache is not None:
+            raw = dc.merge(cache["health_data"], raw, days_back)
+        dc.save_cache(raw)
+
         health_data = raw
         health_summary = format_health_summary(raw, settings)
-        coach = ClaudeCoach(health_summary=health_summary)
+        coach = ClaudeCoach(
+            health_summary=health_summary,
+            history_file=Path("chat_history.json"),
+        )
         garmin_connected = True
         connection_error = None
         print("✓ Connected to Garmin. Web server ready.")

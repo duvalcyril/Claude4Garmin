@@ -13,5 +13,14 @@ __pycache__/
 # User-specific data preferences (not sensitive but personal)
 settings.json
 
+# Cached Garmin health data — regenerated on each run
+garmin_data.json
+
+# Persisted chat history — personal conversation data
+chat_history.json
+
+# Daily digest log
+digest.log
+
 # Claude Code internal files
 .claude/
