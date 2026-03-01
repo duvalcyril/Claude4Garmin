@@ -18,8 +18,8 @@ import webbrowser
 from pathlib import Path
 
 # paths must be imported before server so APP_PORT is resolved on the correct port
-import paths  # noqa: F401 — side-effect: ensures user_data_dir exists
-from paths import bundle_dir, user_data_dir
+import coach.paths  # noqa: F401 — side-effect: ensures user_data_dir exists
+from coach.paths import bundle_dir, user_data_dir
 
 
 # ---------------------------------------------------------------------------
@@ -86,8 +86,8 @@ def _get_pid() -> int:
 def _start_server(port: int) -> None:
     """Run uvicorn in this thread (blocks until shutdown)."""
     import uvicorn
-    import server  # noqa: F401 — registers the FastAPI app
-    from server import app
+    import coach.server  # noqa: F401 — registers the FastAPI app
+    from coach.server import app
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
 
 
@@ -160,7 +160,7 @@ def _run_tray(app_url: str) -> None:
 
 def main() -> None:
     # Resolve the port (server.APP_PORT is set at import time via find_free_port)
-    import server as srv
+    import coach.server as srv
     port = srv.APP_PORT
     app_url = f"http://127.0.0.1:{port}"
 

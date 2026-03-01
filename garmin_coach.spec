@@ -50,6 +50,8 @@ a = Analysis(
         "anthropic",
         "httpx",
         "httpcore",
+        # coach package modules (lazy imports missed by static analysis)
+        "coach.gemini_coach",
         # pystray platform backends
         "pystray._win32",
         "pystray._darwin",

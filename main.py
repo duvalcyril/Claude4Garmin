@@ -23,10 +23,10 @@ from dotenv import load_dotenv
 from garminconnect import GarminConnectAuthenticationError
 from rich.console import Console
 
-import credentials_manager as cm
-from setup_ui import run_setup_wizard, show_status, clear_credentials
-from garmin_client import get_garmin_client, fetch_health_data, format_health_summary
-from claude_client import ClaudeCoach
+import coach.credentials_manager as cm
+from coach.setup_ui import run_setup_wizard, show_status, clear_credentials
+from coach.garmin_client import get_garmin_client, fetch_health_data, format_health_summary
+from coach.claude_client import ClaudeCoach
 
 console = Console()
 

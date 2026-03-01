@@ -7,7 +7,7 @@ Two categories of paths:
                   In frozen mode: sys._MEIPASS (the PyInstaller temp extraction dir).
 
   user_data_dir() Writable user data that must survive across app launches.
-                  In dev mode: the project root directory (matches existing behaviour).
+                  In dev mode: data/ subdirectory under the project root.
                   In frozen mode: OS-appropriate app-data directory.
                     Windows → %APPDATA%/GarminHealthCoach
                     macOS   → ~/Library/Application Support/GarminHealthCoach
@@ -25,7 +25,8 @@ def bundle_dir() -> Path:
     if getattr(sys, "frozen", False):
         # PyInstaller extracts bundled files to sys._MEIPASS at runtime
         return Path(sys._MEIPASS)  # type: ignore[attr-defined]
-    return Path(__file__).parent
+    # Dev mode: this file lives at project_root/coach/paths.py
+    return Path(__file__).parent.parent
 
 
 def user_data_dir() -> Path:
@@ -33,7 +34,7 @@ def user_data_dir() -> Path:
     Writable directory for all user-specific runtime files.
 
     Created on first access if it doesn't exist.
-    In dev mode returns the project root so existing behaviour is unchanged.
+    In dev mode returns project_root/data/ to keep runtime files out of the source tree.
     """
     if getattr(sys, "frozen", False):
         if sys.platform == "win32":
@@ -42,7 +43,9 @@ def user_data_dir() -> Path:
             # macOS / Linux
             base = Path.home() / "Library" / "Application Support"
         data_dir = base / "GarminHealthCoach"
-        data_dir.mkdir(parents=True, exist_ok=True)
-        return data_dir
-    # Dev mode: use the project root (no behaviour change)
-    return Path(__file__).parent
+    else:
+        # Dev mode: use the data/ subdirectory under the project root
+        data_dir = Path(__file__).parent.parent / "data"
+
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return data_dir

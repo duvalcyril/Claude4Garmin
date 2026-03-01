@@ -1,7 +1,7 @@
 """garmin_client.py — Garmin Connect authentication and data fetching.
 
 Authentication strategy:
-- On first run, logs in with email/password and saves OAuth tokens to .garth_session/
+- On first run, logs in with email/password and saves OAuth tokens to data/.garth_session/
 - On subsequent runs, loads saved tokens (avoids re-login and rate limits)
 - If tokens expire, automatically falls back to credential login
 - Supports 2FA via an interactive prompt callback passed to the Garmin constructor
@@ -18,7 +18,7 @@ from garminconnect import (
     GarminConnectTooManyRequestsError,
 )
 
-from paths import user_data_dir
+from .paths import user_data_dir
 
 # Directory where garth saves OAuth session tokens
 SESSION_DIR = user_data_dir() / ".garth_session"

@@ -1,6 +1,6 @@
 """settings_manager.py — User preferences for Garmin data sync.
 
-Settings are stored as JSON in settings.json (project directory).
+Settings are stored as JSON in data/settings.json.
 Non-sensitive values — not stored in the OS keychain.
 
 Settings structure (all keys with defaults):
@@ -36,7 +36,7 @@ Settings structure (all keys with defaults):
 import json
 from pathlib import Path
 
-from paths import user_data_dir
+from .paths import user_data_dir
 
 SETTINGS_FILE = user_data_dir() / "settings.json"
 
@@ -91,5 +91,5 @@ def load_settings() -> dict:
 
 
 def save_settings(settings: dict) -> None:
-    """Persist settings to settings.json."""
+    """Persist settings to data/settings.json."""
     SETTINGS_FILE.write_text(json.dumps(settings, indent=2), encoding="utf-8")

@@ -18,7 +18,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.rule import Rule
 
-import credentials_manager as cm
+from . import credentials_manager as cm
 
 console = Console()
 

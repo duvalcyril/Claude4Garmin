@@ -25,11 +25,11 @@ from pathlib import Path
 PROJECT_DIR = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_DIR))
 
-import credentials_manager as cm
-import settings_manager as sm
-from garmin_client import get_garmin_client, fetch_health_data, format_health_summary
-from claude_client import ClaudeCoach
-from paths import bundle_dir, user_data_dir
+import coach.credentials_manager as cm
+import coach.settings_manager as sm
+from coach.garmin_client import get_garmin_client, fetch_health_data, format_health_summary
+from coach.claude_client import ClaudeCoach
+from coach.paths import bundle_dir, user_data_dir
 
 # Log to the user data directory so it's writable in both dev and packaged modes
 logging.basicConfig(

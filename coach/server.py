@@ -13,7 +13,7 @@ If credentials are missing or Garmin fails, the server still starts and
 redirects the user to /settings to enter credentials from the browser.
 
 Run with:
-    python server.py
+    python launcher.py
 """
 
 import asyncio
@@ -35,13 +35,13 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
-import credentials_manager as cm
-import data_cache as dc
-import settings_manager as sm
-import skills_manager as skm
-from garmin_client import get_garmin_client, fetch_health_data, format_health_summary
-from claude_client import ClaudeCoach
-from paths import bundle_dir, user_data_dir
+from . import credentials_manager as cm
+from . import data_cache as dc
+from . import settings_manager as sm
+from . import skills_manager as skm
+from .garmin_client import get_garmin_client, fetch_health_data, format_health_summary
+from .claude_client import ClaudeCoach
+from .paths import bundle_dir, user_data_dir
 
 
 # ---------------------------------------------------------------------------
@@ -82,7 +82,7 @@ def _make_coach(health_summary: str, history_file: Path):
     provider = settings.get("ai_provider", "claude")
     model    = settings.get("ai_model",    "claude-sonnet-4-6")
     if provider == "gemini":
-        from gemini_coach import GeminiCoach
+        from .gemini_coach import GeminiCoach
         api_key = cm.load_credential("gemini_api_key") or ""
         if not api_key:
             raise ValueError(
@@ -581,7 +581,7 @@ async def api_save_digest_settings(request: Request):
 async def api_digest_test():
     """Send a test digest email immediately, ignoring the digest_enabled toggle."""
     from datetime import date, timedelta
-    from digest import run_digest   # lazy import — keeps errors scoped to this endpoint
+    from digest import run_digest   # lazy import — digest.py lives at project root
     try:
         yesterday = date.today() - timedelta(days=1)
         await asyncio.to_thread(run_digest, yesterday)

@@ -1,6 +1,6 @@
 """data_cache.py — Garmin health data persistence and incremental fetch planning.
 
-Caches the processed health_data dict to garmin_data.json so each startup
+Caches the processed health_data dict to data/garmin_data.json so each startup
 only fetches what has actually changed:
 
   Per-day data (daily_stats, sleep, hrv, training_readiness):
@@ -19,7 +19,7 @@ import json
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from paths import user_data_dir
+from .paths import user_data_dir
 
 CACHE_FILE = user_data_dir() / "garmin_data.json"
 SCHEMA_VERSION = 1

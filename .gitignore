@@ -1,6 +1,3 @@
-# Garmin OAuth session tokens — treated like a password, never commit
-.garth_session/
-
 # .env file — only .env.example should be committed
 .env
 
@@ -10,17 +7,11 @@ __pycache__/
 *.pyc
 *.pyo
 
-# User-specific data preferences (not sensitive but personal)
-settings.json
-
-# Cached Garmin health data — regenerated on each run
-garmin_data.json
-
-# Persisted chat history — personal conversation data
-chat_history.json
-
-# Daily digest log
-digest.log
+# Runtime data directory (settings, cache, chat history, logs, Garmin session)
+data/*.json
+data/*.log
+data/.garth_session/
+!data/.gitkeep
 
 # Claude Code internal files
 .claude/
