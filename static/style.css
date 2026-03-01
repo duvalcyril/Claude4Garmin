@@ -462,6 +462,7 @@ html, body {
 .settings-shell {
   display: flex;
   height: calc(100vh - var(--header-h));
+  margin-top: var(--header-h);
   overflow: hidden;
 }
 
