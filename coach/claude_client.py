@@ -20,7 +20,7 @@ from anthropic import Anthropic, AsyncAnthropic
 MODEL = "claude-sonnet-4-6"
 
 # Max tokens per response — enough for detailed coaching advice without being verbose
-MAX_TOKENS = 1024
+MAX_TOKENS = 4096
 
 
 class ClaudeCoach:
