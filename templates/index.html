@@ -222,7 +222,19 @@
       <div class="messages" id="messages">
         <div class="message coach">
           <div class="bubble">
+            {% if health_data %}
+            {% set _stats = health_data.daily_stats[0] if health_data.daily_stats else {} %}
+            {% set _sleep = health_data.sleep[0]       if health_data.sleep       else {} %}
+            {% set _ready = health_data.training_readiness[0] if health_data.training_readiness else {} %}
+            {% set _ts    = health_data.training_status %}
+            <p>Hello! I've loaded your latest Garmin data.{% if _ts and _ts.label %} Your current training status is <strong>{{ _ts.label }}</strong>.{% endif %}
+            {% if _sleep.score is not none %} Last night's sleep score was <strong>{{ _sleep.score }}/100</strong>{% if _sleep.total_seconds %} ({{ _sleep.total_seconds | hm }}){% endif %}.{% endif %}
+            {% if _ready.score is not none %} Training readiness: <strong>{{ _ready.score }}/100</strong>.{% elif _stats.body_battery is not none %} Body battery: <strong>{{ _stats.body_battery }}%</strong>.{% endif %}
+            {% if _stats.steps is not none %} Steps so far today: <strong>{{ _stats.steps | compact }}</strong>.{% endif %}</p>
+            <p>Ask me anything about your activity, sleep, stress, or recovery — I'll give you specific, actionable insights.</p>
+            {% else %}
             <p>Hello! I've reviewed your Garmin data for the past 7 days. Ask me anything about your activity, sleep, stress, or recovery — I'll give you specific, actionable insights.</p>
+            {% endif %}
           </div>
         </div>
       </div>
