@@ -1,0 +1,81 @@
+name: Build & Release
+
+# Trigger: push a tag like v1.0.0 → builds both platforms and attaches them to the release
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write   # needed to upload release assets
+
+jobs:
+  # ── Windows build ──────────────────────────────────────────────────────────
+  build-windows:
+    name: Windows (.zip)
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build with PyInstaller
+        run: pyinstaller garmin_coach.spec --clean --noconfirm
+
+      - name: Zip output
+        run: |
+          Compress-Archive -Path dist\GarminHealthCoach -DestinationPath GarminHealthCoach-windows.zip -Force
+        shell: powershell
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: GarminHealthCoach-windows.zip
+
+  # ── macOS build ────────────────────────────────────────────────────────────
+  build-macos:
+    name: macOS (.dmg)
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build with PyInstaller
+        run: pyinstaller garmin_coach.spec --clean --noconfirm
+
+      - name: Package as .dmg
+        run: |
+          STAGING=$(mktemp -d)
+          cp -R "dist/GarminHealthCoach.app" "$STAGING/"
+          ln -s /Applications "$STAGING/Applications"
+          hdiutil create \
+            -volname "Garmin Health Coach" \
+            -srcfolder "$STAGING" \
+            -ov \
+            -format UDZO \
+            "GarminHealthCoach.dmg"
+          rm -rf "$STAGING"
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: GarminHealthCoach.dmg

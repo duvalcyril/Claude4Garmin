@@ -18,8 +18,10 @@ from garminconnect import (
     GarminConnectTooManyRequestsError,
 )
 
+from paths import user_data_dir
+
 # Directory where garth saves OAuth session tokens
-SESSION_DIR = Path(".garth_session")
+SESSION_DIR = user_data_dir() / ".garth_session"
 
 # How many days of history to fetch
 DAYS_BACK = 7
