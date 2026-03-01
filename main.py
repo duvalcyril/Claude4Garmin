@@ -148,9 +148,6 @@ def main() -> None:
             console.print(f"\n[red]Failed to connect to Garmin: {e}[/red]")
             sys.exit(1)
 
-    if garmin is None:
-        sys.exit(1)
-
     # --- Fetch health data ---
     console.print("[dim]Fetching your health data (last 7 days)...[/dim]\n")
     try:

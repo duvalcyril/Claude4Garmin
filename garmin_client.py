@@ -24,7 +24,10 @@ SESSION_DIR = Path(".garth_session")
 # How many days of history to fetch
 DAYS_BACK = 7
 
-# Training status integer code → human label
+# Training status integer → label (last-resort fallback only).
+# Garmin's integer encoding is undocumented; we've seen it be inconsistent
+# across firmware versions (e.g., 7 mapped to "Productive", not "Unproductive").
+# The preferred source is trainingStatusFeedbackPhrase — see fetch_health_data().
 TRAINING_STATUS_LABELS = {
     0: "Unknown",
     1: "Not Active",
@@ -38,7 +41,8 @@ TRAINING_STATUS_LABELS = {
     9: "Overreaching",
 }
 
-# Training status string key → human label (Garmin API returns strings, not ints)
+# Training status string key → display label.
+# Used when the API returns trainingStatusFeedbackPhrase (e.g. "PRODUCTIVE_3").
 TRAINING_STATUS_STR_LABELS = {
     "UNKNOWN":       "Unknown",
     "NOT_ACTIVE":    "Not Active",
@@ -79,19 +83,17 @@ def get_garmin_client(email: str, password: str) -> Garmin:
         try:
             client = Garmin()
             client.login(str(SESSION_DIR))
-            print("Loaded Garmin session from cache.")
             return client
         except Exception:
-            print("Cached session expired or invalid — re-authenticating...")
+            pass  # Session expired or invalid — fall through to fresh login
 
     # Fresh login; prompt_mfa is only called if Garmin requires 2FA
     client = Garmin(email=email, password=password, prompt_mfa=_prompt_mfa)
     client.login()
 
-    # Persist tokens so the next run skips this step
+    # Persist tokens so the next run skips re-authentication
     SESSION_DIR.mkdir(exist_ok=True)
     client.garth.dump(str(SESSION_DIR))
-    print("Session tokens saved to cache.")
 
     return client
 

@@ -23,6 +23,7 @@ import subprocess
 import sys
 import threading
 import webbrowser
+from datetime import datetime, date
 from pathlib import Path
 
 from contextlib import asynccontextmanager
@@ -115,7 +116,6 @@ templates = Jinja2Templates(directory="templates")
 
 def _fmt_date(date_str: str) -> str:
     """YYYY-MM-DD → 'Today', 'Yesterday', or 'Mon, Feb 28'."""
-    from datetime import datetime, date
     try:
         d = datetime.strptime(date_str, "%Y-%m-%d").date()
         delta = (date.today() - d).days
@@ -127,8 +127,20 @@ def _fmt_date(date_str: str) -> str:
     except Exception:
         return date_str
 
-def _thousands(n) -> str:
-    return f"{int(n):,}" if n is not None else "—"
+
+def _fmt_date_short(date_str: str) -> str:
+    """YYYY-MM-DD → 'Today', 'Yest', or weekday abbreviation ('Mon', 'Tue'…)."""
+    try:
+        d = datetime.strptime(date_str, "%Y-%m-%d").date()
+        delta = (date.today() - d).days
+        if delta == 0:
+            return "Today"
+        if delta == 1:
+            return "Yest"
+        return d.strftime("%a")
+    except Exception:
+        return date_str
+
 
 def _hm(seconds) -> str:
     """Seconds → '7h 22m'."""
@@ -136,35 +148,28 @@ def _hm(seconds) -> str:
         return "—"
     return f"{int(seconds) // 3600}h {(int(seconds) % 3600) // 60}m"
 
+
 def _dur(seconds) -> str:
     """Seconds → '45:23' (mm:ss)."""
     if not seconds:
         return "—"
     return f"{int(seconds) // 60}:{int(seconds) % 60:02d}"
 
-def _fmt_date_short(date_str: str) -> str:
-    """YYYY-MM-DD → 'Today', 'Yest', or weekday abbreviation ('Mon', 'Tue'…)."""
-    from datetime import datetime, date
-    try:
-        d = datetime.strptime(date_str, "%Y-%m-%d").date()
-        delta = (date.today() - d).days
-        if delta == 0: return "Today"
-        if delta == 1: return "Yest"
-        return d.strftime("%a")
-    except Exception:
-        return date_str
 
 def _compact(n) -> str:
-    """Abbreviate large numbers for compact table cells: 8234 → '8.2k'."""
-    if n is None: return "—"
+    """Abbreviate large numbers for compact table cells: 8,234 → '8.2k'."""
+    if n is None:
+        return "—"
     n = int(n)
-    if n >= 10000: return f"{n // 1000}k"
-    if n >= 1000:  return f"{n / 1000:.1f}k"
+    if n >= 10000:
+        return f"{n // 1000}k"
+    if n >= 1000:
+        return f"{n / 1000:.1f}k"
     return str(n)
+
 
 templates.env.filters["fmt_date"]       = _fmt_date
 templates.env.filters["fmt_date_short"] = _fmt_date_short
-templates.env.filters["thousands"]      = _thousands
 templates.env.filters["compact"]        = _compact
 templates.env.filters["hm"]            = _hm
 templates.env.filters["dur"]           = _dur

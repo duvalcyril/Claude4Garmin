@@ -39,11 +39,11 @@ class ClaudeCoach:
 Your coaching style:
 - Be concise and actionable — skip preambles, get to the insight
 - Reference specific numbers from the data when relevant
-- Spot trends and patterns across the week, not just single-day snapshots
+- Spot trends and patterns across days, not just single-day snapshots
 - Be encouraging but honest; flag concerning patterns (e.g., chronic high stress, poor sleep)
 - When the user asks general questions, ground your answer in their actual data
 
-Here is the user's Garmin health data for the past 7 days:
+Here is the user's recent Garmin health data:
 
 {health_summary}
 
