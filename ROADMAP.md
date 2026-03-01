@@ -73,6 +73,53 @@ Things to figure out:
 
 ---
 
+## Multi-model AI support
+
+Currently hard-wired to Claude via the Anthropic SDK. The goal is a pluggable model layer so users can bring their own API key for any supported provider.
+
+### Target models
+- **OpenAI** — GPT-4o, GPT-4o-mini (chat completions API, SSE streaming)
+- **Google Gemini** — Gemini 1.5 Pro / Flash (Google AI Studio key or Vertex AI)
+- **Ollama** — local models (Llama 3, Mistral, etc.) with no API key required; useful for full offline / privacy-first setups
+
+### Design approach
+- Extract `ClaudeCoach` into a base `Coach` interface with `chat_stream_async()` and `reset_history()` methods
+- Add `OpenAICoach`, `GeminiCoach`, and `OllamaCoach` implementations in a `coaches/` module
+- Settings page: "AI Model" section with a provider dropdown and API key field (stored in keychain per provider)
+- `settings.json` stores the active provider and model name; `server.py` instantiates the right coach on startup / after settings change
+- System prompt and health summary injection stays identical across all providers — only the SDK call differs
+
+### Things to figure out
+- Streaming response format differs between providers (OpenAI delta chunks, Gemini candidates, Ollama line-delimited JSON) — needs a normalised async iterator
+- Token / context limits vary; the health summary can be long — may need truncation logic per provider
+- Ollama requires the user to have it installed and a model pulled locally; needs graceful error messaging if the server isn't running
+
+---
+
+## Apple Watch / Apple Health support
+
+Apple provides no public web API for Health data (HealthKit is sandboxed to on-device iOS/macOS apps), so integration requires one of these approaches:
+
+**Option A — XML export (lowest friction)**
+User exports from iPhone: *Settings → Health → Export All Health Data* → uploads the `.zip` on the Settings page. The app parses `export.xml` and normalises Apple Health fields into the existing `health_data` schema.
+- Covers all Apple Watch metrics (steps, heart rate, HRV, sleep via Sleep app or AutoSleep, etc.)
+- Manual re-export needed for fresh data — best suited for periodic review rather than daily coaching
+
+**Option B — Health Auto Export push**
+Third-party iOS app (Health Auto Export, ~$4) auto-pushes HealthKit data on a schedule to a configurable webhook. Add a `/api/apple-health` POST endpoint that receives and stores the payload.
+- Near-real-time data without manual steps once configured
+- Requires the iOS app and the server to be reachable from the phone (local network or ngrok)
+
+**Option C — iPhone Shortcuts**
+Native Shortcuts automation reads HealthKit and POSTs JSON to a local URL. Free but requires manual setup per metric and has limited scheduling flexibility.
+
+Things to figure out:
+- Whether to support Garmin + Apple Watch simultaneously or as mutually exclusive sources
+- How to normalise divergent metric names (Apple's `HKQuantityTypeIdentifierHeartRateVariabilitySDNN` vs Garmin's `lastNight5MinHighRmssd`, etc.)
+- Sleep stage mapping (Apple Health stages vs Garmin stages)
+
+---
+
 ## Parking lot
 
 - **Trend alerts**: flag when a metric crosses a threshold (e.g. resting HR up 5+ bpm

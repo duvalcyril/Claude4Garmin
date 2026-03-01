@@ -71,6 +71,9 @@ DEFAULTS: dict = {
     "digest_enabled": False,
     "digest_recipient": "",
     "digest_send_time": "07:00",
+    # AI Provider
+    "ai_provider": "claude",
+    "ai_model":    "claude-sonnet-4-6",
 }
 
 

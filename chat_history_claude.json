@@ -1,0 +1,10 @@
+[
+  {
+    "role": "user",
+    "content": "who are you"
+  },
+  {
+    "role": "assistant",
+    "content": "I'm your personal AI health and fitness coach, with direct access to your Garmin wearable data.\n\nI can see your recent stats — sleep, stress, HRV, body battery, workouts, body composition, and more — and use them to give you **personalized, data-driven coaching**.\n\nHere's a quick snapshot of where you stand right now:\n\n- 🟢 **Training status:** Productive\n- 😴 **Last night's sleep:** 8h 36m, score 82\n- ⚡ **Body battery:** 73% — solid\n- 🫀 **Readiness:** 75/100 (High)\n\n**What I can help you with:**\n- Analyzing your trends (sleep, recovery, stress)\n- Workout recommendations based on your readiness\n- Body composition progress tracking\n- Flagging overtraining or recovery issues\n\nWhat would you like to dive into?"
+  }
+]

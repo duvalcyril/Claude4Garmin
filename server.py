@@ -54,6 +54,31 @@ connection_error: str | None = None
 
 
 # ---------------------------------------------------------------------------
+# Coach factory — returns the right coach based on settings
+# ---------------------------------------------------------------------------
+
+def _make_coach(health_summary: str, history_file: Path):
+    """Instantiate the coach configured in settings (Claude or Gemini)."""
+    settings = sm.load_settings()
+    provider = settings.get("ai_provider", "claude")
+    model    = settings.get("ai_model",    "claude-sonnet-4-6")
+    if provider == "gemini":
+        from gemini_coach import GeminiCoach
+        api_key = cm.load_credential("gemini_api_key") or ""
+        if not api_key:
+            raise ValueError(
+                "Gemini API key not configured. Add it in Settings → Connection."
+            )
+        return GeminiCoach(
+            health_summary=health_summary,
+            history_file=history_file,
+            api_key=api_key,
+            model=model,
+        )
+    return ClaudeCoach(health_summary=health_summary, history_file=history_file)
+
+
+# ---------------------------------------------------------------------------
 # Connection helper — called on startup and after credential updates
 # ---------------------------------------------------------------------------
 
@@ -98,10 +123,8 @@ async def _connect() -> None:
 
         health_data = raw
         health_summary = format_health_summary(raw, settings)
-        coach = ClaudeCoach(
-            health_summary=health_summary,
-            history_file=Path("chat_history.json"),
-        )
+        _provider = settings.get("ai_provider", "claude")
+        coach = _make_coach(health_summary, Path(f"chat_history_{_provider}.json"))
         garmin_connected = True
         connection_error = None
         print("✓ Connected to Garmin. Web server ready.")
@@ -253,6 +276,7 @@ async def settings_page(request: Request, error: str = "", success: str = ""):
         "skills": skm.load_skills(),
         "has_digest_sender":       bool(cm.load_credential("digest_gmail_sender")),
         "has_digest_app_password": bool(cm.load_credential("digest_gmail_app_password")),
+        "has_gemini_key":          bool(cm.load_credential("gemini_api_key")),
     })
 
 
@@ -443,6 +467,21 @@ async def api_save_data_settings(request: Request):
         await _connect()
 
     return RedirectResponse("/settings?success=data_saved", status_code=303)
+
+
+@app.post("/api/ai-settings")
+async def api_save_ai_settings(request: Request):
+    """Save AI provider / model selection and reconnect the coach."""
+    form = await request.form()
+    settings = sm.load_settings()
+    settings["ai_provider"] = form.get("ai_provider", "claude")
+    settings["ai_model"]    = form.get("ai_model",    "claude-sonnet-4-6")
+    sm.save_settings(settings)
+    if form.get("gemini_api_key"):
+        cm.save_credential("gemini_api_key", form["gemini_api_key"])
+    if garmin_connected:
+        await _connect()
+    return RedirectResponse("/settings?success=ai_saved", status_code=303)
 
 
 @app.post("/api/digest-settings")

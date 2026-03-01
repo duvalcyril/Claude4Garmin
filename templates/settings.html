@@ -57,6 +57,10 @@
           <div class="banner banner-error" style="margin-bottom:20px;">✗ All fields are required.</div>
         {% endif %}
 
+        {% if success == "ai_saved" %}
+          <div class="banner banner-success" style="margin-bottom:20px;">✓ AI provider saved. Coach restarted with the new model.</div>
+        {% endif %}
+
         <form method="POST" action="/api/credentials" class="settings-form">
 
           <div class="settings-2col">
@@ -118,6 +122,46 @@
           </div>
 
         </form>
+
+        <!-- ── AI Provider ──────────────────────────────────────────── -->
+        <form method="POST" action="/api/ai-settings" class="settings-form" style="margin-top:20px;">
+          <div class="settings-card">
+            <div class="form-section-title">AI Provider</div>
+            <div style="display:flex; flex-direction:column; gap:16px; margin-top:16px;">
+              <div class="form-group">
+                <label for="ai_provider">Provider</label>
+                <select id="ai_provider" name="ai_provider">
+                  <option value="claude" {% if data_settings.ai_provider != 'gemini' %}selected{% endif %}>Claude (Anthropic)</option>
+                  <option value="gemini" {% if data_settings.ai_provider == 'gemini' %}selected{% endif %}>Gemini (Google)</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="ai_model">Model</label>
+                <select id="ai_model" name="ai_model"></select>
+              </div>
+              <div class="form-group" id="gemini-key-group">
+                <label for="gemini_api_key">
+                  Google AI Studio Key
+                  {% if has_gemini_key %}
+                    <span class="field-status field-set">● set</span>
+                  {% else %}
+                    <span class="field-status field-missing">● not set</span>
+                  {% endif %}
+                </label>
+                <input type="password" id="gemini_api_key" name="gemini_api_key"
+                       placeholder="{% if has_gemini_key %}Leave blank to keep existing{% else %}AIza...{% endif %}"
+                       autocomplete="new-password" />
+                <p style="font-size:12px; color:var(--muted); margin-top:4px;">
+                  Get a free key at <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--accent);">aistudio.google.com</a>
+                </p>
+              </div>
+            </div>
+            <div style="margin-top:20px;">
+              <button type="submit" class="btn-primary" style="min-width:180px;">Save &amp; Reconnect</button>
+            </div>
+          </div>
+        </form>
+
       </div><!-- /panel-connection -->
 
       <!-- ── Data panel ─────────────────────────────────────────────── -->
@@ -437,6 +481,7 @@
     var initialPanel = "connection";
     if (success === "data_saved")        initialPanel = "data";
     else if (success === "digest_saved") initialPanel = "digest";
+    else if (success === "ai_saved")     initialPanel = "connection";
     else if (error && error !== "passwords_mismatch" && error !== "missing_fields") initialPanel = "digest";
     else {
       var hash = window.location.hash.slice(1);
@@ -507,6 +552,48 @@
       var file = e.dataTransfer.files[0];
       if (file) uploadFile(file);
     });
+
+    /* ── AI provider switcher ────────────────────────────────────── */
+    var AI_MODELS = {
+      claude: [
+        { v: "claude-sonnet-4-6",        l: "Claude Sonnet 4.6 (recommended)" },
+        { v: "claude-opus-4-6",           l: "Claude Opus 4.6" },
+        { v: "claude-haiku-4-5-20251001", l: "Claude Haiku 4.5" },
+      ],
+      gemini: [
+        { v: "gemini-2.5-flash", l: "Gemini 2.5 Flash (recommended)" },
+        { v: "gemini-2.5-pro",   l: "Gemini 2.5 Pro" },
+        { v: "gemini-2.0-flash", l: "Gemini 2.0 Flash" },
+      ],
+    };
+    var _currentModel   = "{{ data_settings.ai_model | default('claude-sonnet-4-6') }}";
+    var _providerSel    = document.getElementById("ai_provider");
+    var _modelSel       = document.getElementById("ai_model");
+    var _geminiKeyGroup = document.getElementById("gemini-key-group");
+
+    function _populateModels(provider) {
+      if (!_modelSel) return;
+      _modelSel.innerHTML = "";
+      (AI_MODELS[provider] || []).forEach(function(opt) {
+        var o = document.createElement("option");
+        o.value = opt.v; o.textContent = opt.l;
+        if (opt.v === _currentModel) o.selected = true;
+        _modelSel.appendChild(o);
+      });
+    }
+
+    function _onProviderChange() {
+      if (!_providerSel) return;
+      var p = _providerSel.value;
+      if (_geminiKeyGroup) _geminiKeyGroup.style.display = (p === "gemini") ? "" : "none";
+      _populateModels(p);
+    }
+
+    if (_providerSel) {
+      _populateModels(_providerSel.value);
+      _onProviderChange();
+      _providerSel.addEventListener("change", _onProviderChange);
+    }
 
     /* ── Daily Digest test send ───────────────────────────────────── */
     var digestTestBtn    = document.getElementById("digest-test-btn");
