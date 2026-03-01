@@ -142,10 +142,32 @@ def _dur(seconds) -> str:
         return "—"
     return f"{int(seconds) // 60}:{int(seconds) % 60:02d}"
 
-templates.env.filters["fmt_date"]  = _fmt_date
-templates.env.filters["thousands"] = _thousands
-templates.env.filters["hm"]        = _hm
-templates.env.filters["dur"]       = _dur
+def _fmt_date_short(date_str: str) -> str:
+    """YYYY-MM-DD → 'Today', 'Yest', or weekday abbreviation ('Mon', 'Tue'…)."""
+    from datetime import datetime, date
+    try:
+        d = datetime.strptime(date_str, "%Y-%m-%d").date()
+        delta = (date.today() - d).days
+        if delta == 0: return "Today"
+        if delta == 1: return "Yest"
+        return d.strftime("%a")
+    except Exception:
+        return date_str
+
+def _compact(n) -> str:
+    """Abbreviate large numbers for compact table cells: 8234 → '8.2k'."""
+    if n is None: return "—"
+    n = int(n)
+    if n >= 10000: return f"{n // 1000}k"
+    if n >= 1000:  return f"{n / 1000:.1f}k"
+    return str(n)
+
+templates.env.filters["fmt_date"]       = _fmt_date
+templates.env.filters["fmt_date_short"] = _fmt_date_short
+templates.env.filters["thousands"]      = _thousands
+templates.env.filters["compact"]        = _compact
+templates.env.filters["hm"]            = _hm
+templates.env.filters["dur"]           = _dur
 
 
 # ---------------------------------------------------------------------------

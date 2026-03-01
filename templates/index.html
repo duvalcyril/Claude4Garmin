@@ -27,6 +27,8 @@
 
     <!-- Sidebar: health data -->
     <aside class="sidebar">
+
+      <!-- Header: title + fetch date + training status badge -->
       <div class="sidebar-header">
         <div class="sidebar-header-row">
           <span>Health Summary</span>
@@ -34,190 +36,183 @@
         </div>
         {% if health_data and health_data.training_status and health_data.training_status.label %}
         <div class="training-status-badge training-status-{{ health_data.training_status.label | lower | replace(' ', '-') }}">
-          Training Status: {{ health_data.training_status.label }}
+          {{ health_data.training_status.label }}
         </div>
         {% endif %}
       </div>
 
-      <div class="sidebar-body">
-
-        <!-- ── Daily Stats ──────────────────────────────────────────── -->
-        {% if health_data and health_data.daily_stats %}
-        <div class="data-section">
-          <div class="data-section-title">Daily Stats</div>
-          {% for day in health_data.daily_stats %}
-            {% if 'error' not in day %}
-            <div class="day-card">
-              <div class="day-date">{{ day.date | fmt_date }}</div>
-              <div class="day-metrics">
-                {% if day.steps is not none %}
-                <div class="metric-row">
-                  <span class="metric-label">Steps</span>
-                  <span class="metric-value">{{ day.steps | thousands }}</span>
-                </div>
-                {% endif %}
-                {% if day.calories_total is not none %}
-                <div class="metric-row">
-                  <span class="metric-label">Calories</span>
-                  <span class="metric-value">{{ day.calories_total | thousands }} kcal</span>
-                </div>
-                {% endif %}
-                {% if day.stress_avg is not none %}
-                <div class="metric-row">
-                  <span class="metric-label">Stress</span>
-                  <span class="metric-value">{{ day.stress_avg }}/100</span>
-                </div>
-                {% endif %}
-                {% if day.body_battery is not none %}
-                <div class="metric-row">
-                  <span class="metric-label">Body Battery</span>
-                  <span class="metric-value">{{ day.body_battery }}%</span>
-                </div>
-                {% endif %}
-                {% if day.resting_hr is not none %}
-                <div class="metric-row">
-                  <span class="metric-label">Resting HR</span>
-                  <span class="metric-value">{{ day.resting_hr }} bpm</span>
-                </div>
-                {% endif %}
-                {% if day.distance_m is not none %}
-                <div class="metric-row">
-                  <span class="metric-label">Distance</span>
-                  <span class="metric-value">{{ (day.distance_m / 1000) | round(1) }} km</span>
-                </div>
-                {% endif %}
-                {% if health_data.hrv %}
-                  {% set hrv_entry = health_data.hrv | selectattr("date", "equalto", day.date) | list | first %}
-                  {% if hrv_entry and hrv_entry.last_night_avg %}
-                  <div class="metric-row">
-                    <span class="metric-label">HRV</span>
-                    <span class="metric-value">{{ hrv_entry.last_night_avg | int }} ms
-                      {% if hrv_entry.status %}<span class="hrv-status hrv-{{ hrv_entry.status | lower }}">{{ hrv_entry.status | title }}</span>{% endif %}
-                    </span>
-                  </div>
-                  {% endif %}
-                {% endif %}
-                {% if health_data.training_readiness %}
-                  {% set tr_entry = health_data.training_readiness | selectattr("date", "equalto", day.date) | list | first %}
-                  {% if tr_entry and tr_entry.score is not none %}
-                  <div class="metric-row">
-                    <span class="metric-label">Readiness</span>
-                    <span class="metric-value">{{ tr_entry.score }}/100
-                      {% if tr_entry.level %}<span class="readiness-level readiness-{{ tr_entry.level | lower }}">{{ tr_entry.level | title }}</span>{% endif %}
-                    </span>
-                  </div>
-                  {% endif %}
-                {% endif %}
-              </div>
-            </div>
-            {% endif %}
-          {% endfor %}
+      <!-- Summary strip: today's key numbers always visible -->
+      {% if health_data %}
+      {% set today_stats = health_data.daily_stats[0] if health_data.daily_stats else {} %}
+      {% set today_sleep = health_data.sleep[0] if health_data.sleep else {} %}
+      {% set today_ready = health_data.training_readiness[0] if health_data.training_readiness else {} %}
+      <div class="sidebar-summary">
+        <div class="summary-metric">
+          <span class="summary-value">{{ today_stats.steps | compact if today_stats.steps is not none else "—" }}</span>
+          <span class="summary-label">Steps</span>
         </div>
-        {% endif %}
-
-        <!-- ── Sleep ───────────────────────────────────────────────── -->
-        {% if health_data and health_data.sleep %}
-        <div class="data-section">
-          <div class="data-section-title">Sleep</div>
-          {% for entry in health_data.sleep %}
-            {% if 'error' not in entry and entry.total_seconds %}
-            <div class="day-card">
-              <div class="day-date">{{ entry.date | fmt_date }}</div>
-              <div class="day-metrics">
-                {% if entry.total_seconds is not none %}
-                <div class="metric-row">
-                  <span class="metric-label">Total</span>
-                  <span class="metric-value">{{ entry.total_seconds | hm }}</span>
-                </div>
-                {% endif %}
-                {% if entry.deep_seconds %}
-                <div class="metric-row">
-                  <span class="metric-label">Deep</span>
-                  <span class="metric-value">{{ entry.deep_seconds | hm }}</span>
-                </div>
-                {% endif %}
-                {% if entry.rem_seconds %}
-                <div class="metric-row">
-                  <span class="metric-label">REM</span>
-                  <span class="metric-value">{{ entry.rem_seconds | hm }}</span>
-                </div>
-                {% endif %}
-                {% if entry.light_seconds %}
-                <div class="metric-row">
-                  <span class="metric-label">Light</span>
-                  <span class="metric-value">{{ entry.light_seconds | hm }}</span>
-                </div>
-                {% endif %}
-                {% if entry.score is not none %}
-                <div class="metric-row">
-                  <span class="metric-label">Score</span>
-                  <span class="metric-value">{{ entry.score }}/100</span>
-                </div>
-                {% endif %}
-              </div>
-            </div>
-            {% endif %}
-          {% endfor %}
+        <div class="summary-metric">
+          <span class="summary-value">{{ (today_stats.body_battery | string + "%") if today_stats.body_battery is not none else "—" }}</span>
+          <span class="summary-label">Battery</span>
         </div>
-        {% endif %}
+        <div class="summary-metric">
+          <span class="summary-value">{{ today_sleep.score if today_sleep.score is not none else "—" }}</span>
+          <span class="summary-label">Sleep</span>
+        </div>
+        <div class="summary-metric">
+          <span class="summary-value">{{ today_ready.score if today_ready.score is not none else "—" }}</span>
+          <span class="summary-label">Ready</span>
+        </div>
+      </div>
+      {% endif %}
 
-        <!-- ── Activities ──────────────────────────────────────────── -->
-        {% if health_data and health_data.activities %}
-        <div class="data-section">
-          <div class="data-section-title">Activities</div>
+      <!-- Tab strip -->
+      <div class="sidebar-tabs" role="tablist">
+        <button class="sidebar-tab active" data-tab="tab-stats"    role="tab">Stats</button>
+        <button class="sidebar-tab"         data-tab="tab-sleep"    role="tab">Sleep</button>
+        <button class="sidebar-tab"         data-tab="tab-activity" role="tab">Activity</button>
+        <button class="sidebar-tab"         data-tab="tab-body"     role="tab">Body</button>
+      </div>
+
+      <!-- Tab panels -->
+      <div class="sidebar-tab-panels">
+
+        <!-- ── Stats tab ────────────────────────────────────────── -->
+        <div id="tab-stats" class="tab-panel active" role="tabpanel">
+          {% if health_data and health_data.daily_stats %}
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th></th>
+                <th>Steps</th>
+                <th>Stress</th>
+                <th>BB</th>
+                <th>RHR</th>
+                <th>HRV</th>
+                <th>Ready</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for day in health_data.daily_stats %}
+              {% if 'error' not in day %}
+              {% set hrv_e = health_data.hrv | selectattr("date", "equalto", day.date) | list | first if health_data.hrv else none %}
+              {% set tr_e  = health_data.training_readiness | selectattr("date", "equalto", day.date) | list | first if health_data.training_readiness else none %}
+              <tr>
+                <td class="col-date">{{ day.date | fmt_date_short }}</td>
+                <td>{{ day.steps | compact if day.steps is not none else "—" }}</td>
+                <td>{{ day.stress_avg if day.stress_avg is not none else "—" }}</td>
+                <td>{{ (day.body_battery | string + "%") if day.body_battery is not none else "—" }}</td>
+                <td>{{ day.resting_hr if day.resting_hr is not none else "—" }}</td>
+                <td class="{% if hrv_e and hrv_e.status %}hrv-cell hrv-{{ hrv_e.status | lower }}{% endif %}">
+                  {{ hrv_e.last_night_avg | int if hrv_e and hrv_e.last_night_avg else "—" }}
+                </td>
+                <td class="{% if tr_e and tr_e.level %}ready-cell ready-{{ tr_e.level | lower }}{% endif %}">
+                  {{ tr_e.score if tr_e and tr_e.score is not none else "—" }}
+                </td>
+              </tr>
+              {% endif %}
+              {% endfor %}
+            </tbody>
+          </table>
+          {% else %}
+          <p class="tab-empty">No daily stats available.</p>
+          {% endif %}
+        </div>
+
+        <!-- ── Sleep tab ─────────────────────────────────────────── -->
+        <div id="tab-sleep" class="tab-panel" role="tabpanel">
+          {% if health_data and health_data.sleep %}
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th></th>
+                <th>Total</th>
+                <th>Deep</th>
+                <th>REM</th>
+                <th>Score</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for entry in health_data.sleep %}
+              {% if 'error' not in entry and entry.total_seconds %}
+              <tr>
+                <td class="col-date">{{ entry.date | fmt_date_short }}</td>
+                <td>{{ entry.total_seconds | hm }}</td>
+                <td>{{ entry.deep_seconds | hm if entry.deep_seconds else "—" }}</td>
+                <td>{{ entry.rem_seconds  | hm if entry.rem_seconds  else "—" }}</td>
+                <td>{{ entry.score if entry.score is not none else "—" }}</td>
+              </tr>
+              {% endif %}
+              {% endfor %}
+            </tbody>
+          </table>
+          {% else %}
+          <p class="tab-empty">No sleep data available.</p>
+          {% endif %}
+        </div>
+
+        <!-- ── Activity tab ──────────────────────────────────────── -->
+        <div id="tab-activity" class="tab-panel" role="tabpanel">
+          {% if health_data and health_data.activities %}
           {% for act in health_data.activities %}
-          <div class="activity-card">
-            <div class="activity-name">{{ act.name or act.type or "Activity" }}</div>
-            <div class="activity-meta">
-              {%- if act.date %}{{ act.date | fmt_date }}{% endif %}
+          <div class="act-row">
+            <div class="act-name">{{ act.name or act.type or "Activity" }}</div>
+            <div class="act-meta">
+              {{- act.date | fmt_date_short if act.date else "" -}}
               {%- if act.duration_seconds %} &middot; {{ act.duration_seconds | dur }}{% endif %}
-              {%- if act.distance_meters %} &middot; {{ (act.distance_meters / 1000) | round(1) }} km{% endif %}
-            </div>
-            {% if act.avg_hr or act.calories %}
-            <div class="activity-stats">
-              {%- if act.avg_hr %}avg HR {{ act.avg_hr | int }} bpm{% endif %}
-              {%- if act.avg_hr and act.calories %} &middot; {% endif %}
-              {%- if act.calories %}{{ act.calories | int }} kcal{% endif %}
-            </div>
-            {% endif %}
-          </div>
-          {% endfor %}
-        </div>
-        {% endif %}
-
-        <!-- ── Body Composition ─────────────────────────────────── -->
-        {% if health_data and health_data.body_composition %}
-        <div class="data-section">
-          <div class="data-section-title">Body Composition</div>
-          {% for entry in health_data.body_composition[:3] %}
-          <div class="day-card">
-            <div class="day-date">{{ entry.date | fmt_date }}</div>
-            <div class="day-metrics">
-              {% if entry.weight_kg is not none %}
-              <div class="metric-row">
-                <span class="metric-label">Weight</span>
-                <span class="metric-value">{{ entry.weight_kg | round(1) }} kg</span>
-              </div>
-              {% endif %}
-              {% if entry.body_fat_pct is not none %}
-              <div class="metric-row">
-                <span class="metric-label">Body Fat</span>
-                <span class="metric-value">{{ entry.body_fat_pct | round(1) }}%</span>
-              </div>
-              {% endif %}
-              {% if entry.muscle_mass_kg is not none %}
-              <div class="metric-row">
-                <span class="metric-label">Muscle</span>
-                <span class="metric-value">{{ entry.muscle_mass_kg | round(1) }} kg</span>
-              </div>
-              {% endif %}
+              {%- if act.distance_meters %} &middot; {{ (act.distance_meters / 1000) | round(1) }}&thinsp;km{% endif %}
+              {%- if act.avg_hr %} &middot; {{ act.avg_hr | int }}&thinsp;bpm{% endif %}
             </div>
           </div>
           {% endfor %}
+          {% else %}
+          <p class="tab-empty">No activities available.</p>
+          {% endif %}
         </div>
-        {% endif %}
 
-      </div>
+        <!-- ── Body tab ──────────────────────────────────────────── -->
+        <div id="tab-body" class="tab-panel" role="tabpanel">
+          {% if health_data and health_data.body_composition %}
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th></th>
+                <th>Weight</th>
+                <th>Fat%</th>
+                <th>Muscle</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for entry in health_data.body_composition %}
+              <tr>
+                <td class="col-date">{{ entry.date | fmt_date_short }}</td>
+                <td>{{ entry.weight_kg | round(1) if entry.weight_kg is not none else "—" }}</td>
+                <td>{{ entry.body_fat_pct | round(1) if entry.body_fat_pct is not none else "—" }}</td>
+                <td>{{ entry.muscle_mass_kg | round(1) if entry.muscle_mass_kg is not none else "—" }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% else %}
+          <p class="tab-empty">No body composition data.<br>Requires a Garmin-compatible smart scale.</p>
+          {% endif %}
+        </div>
+
+      </div><!-- /sidebar-tab-panels -->
+
+      <!-- Tab switching script -->
+      <script>
+        document.querySelectorAll(".sidebar-tab").forEach(function(tab) {
+          tab.addEventListener("click", function() {
+            document.querySelectorAll(".sidebar-tab").forEach(function(t) { t.classList.remove("active"); });
+            document.querySelectorAll(".tab-panel").forEach(function(p) { p.classList.remove("active"); });
+            tab.classList.add("active");
+            var panel = document.getElementById(tab.dataset.tab);
+            if (panel) panel.classList.add("active");
+          });
+        });
+      </script>
+
     </aside>
 
     <!-- Chat panel -->

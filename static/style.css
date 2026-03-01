@@ -663,3 +663,158 @@ html, body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ── Sidebar: summary strip ───────────────────────────────────────── */
+.sidebar-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.summary-metric {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 4px;
+  border-right: 1px solid var(--border);
+}
+.summary-metric:last-child { border-right: none; }
+
+.summary-value {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.summary-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  margin-top: 3px;
+}
+
+/* ── Sidebar: tab strip ──────────────────────────────────────────── */
+.sidebar-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.sidebar-tab {
+  flex: 1;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 8px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color .15s, border-color .15s;
+  margin-bottom: -1px;
+}
+.sidebar-tab:hover { color: var(--text); }
+.sidebar-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* ── Sidebar: tab panels ─────────────────────────────────────────── */
+.sidebar-tab-panels {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ── Compact data table (Stats, Sleep, Body tabs) ────────────────── */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+
+.data-table thead th {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 7px 6px 5px;
+  text-align: right;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 1;
+}
+.data-table thead th:first-child { text-align: left; padding-left: 12px; }
+
+.data-table tbody td {
+  padding: 5px 6px;
+  text-align: right;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  border-bottom: 1px solid var(--border);
+}
+.data-table tbody tr:last-child td { border-bottom: none; }
+.data-table tbody td:first-child { text-align: left; padding-left: 12px; }
+
+.col-date {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* HRV status coloring in table cells (text-only, overrides chip background) */
+.hrv-cell { font-variant-numeric: tabular-nums; }
+.hrv-cell.hrv-balanced   { background: none; color: #065f46; font-weight: 600; }
+.hrv-cell.hrv-low        { background: none; color: #b91c1c; font-weight: 600; }
+.hrv-cell.hrv-unbalanced { background: none; color: #b45309; font-weight: 600; }
+
+/* Training Readiness coloring in table cells */
+.ready-cell { font-variant-numeric: tabular-nums; }
+.ready-cell.ready-high      { color: #065f46; font-weight: 600; }
+.ready-cell.ready-very_high { color: #065f46; font-weight: 600; }
+.ready-cell.ready-moderate  { color: #1d4ed8; font-weight: 600; }
+.ready-cell.ready-low       { color: #b91c1c; font-weight: 600; }
+
+/* ── Activity tab: compact rows ──────────────────────────────────── */
+.act-row {
+  padding: 7px 12px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.act-row:last-child { border-bottom: none; }
+
+.act-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.act-meta {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 1px;
+}
+
+/* ── Empty state ─────────────────────────────────────────────────── */
+.tab-empty {
+  padding: 20px 16px;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.5;
+}
