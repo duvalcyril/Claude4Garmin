@@ -60,6 +60,7 @@ def _load_skill_file(path: Path) -> dict | None:
             "trigger": trigger,
             "description": description,
             "content": raw,   # full SKILL.md text used as system-prompt overlay
+            "body": body,     # persona instructions only, without frontmatter
             "type": "persona",
         }
     except Exception:

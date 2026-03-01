@@ -273,7 +273,10 @@ async def settings_page(request: Request, error: str = "", success: str = ""):
         "error": error,
         "success": success,
         "data_settings": sm.load_settings(),
-        "skills": skm.load_skills(),
+        "skills": (_skills := skm.load_skills()),
+        "persona_bodies": json.dumps({
+            s["trigger"]: s.get("body", "") for s in _skills if s.get("type") == "persona"
+        }),
         "has_digest_sender":       bool(cm.load_credential("digest_gmail_sender")),
         "has_digest_app_password": bool(cm.load_credential("digest_gmail_app_password")),
         "has_gemini_key":          bool(cm.load_credential("gemini_api_key")),
@@ -360,6 +363,33 @@ async def api_upload_skill(file: UploadFile = File(...)):
 
     else:
         raise HTTPException(400, detail="Unsupported file type. Upload a .skill or .json file.")
+
+
+@app.post("/api/create-persona")
+async def api_create_persona(request: Request):
+    """Create a new .skill file from trigger, description, and persona content."""
+    import io, zipfile as zf
+    form        = await request.form()
+    trigger     = (form.get("trigger") or "").strip().lower().replace(" ", "-")
+    description = (form.get("description") or "").strip()
+    content     = (form.get("content") or "").strip()
+
+    if not trigger:
+        return JSONResponse({"ok": False, "error": "Trigger name is required."}, status_code=400)
+    if not content:
+        return JSONResponse({"ok": False, "error": "Persona instructions are required."}, status_code=400)
+
+    skill_md = f"---\nname: {trigger}\ndescription: {description}\n---\n{content}"
+
+    buf = io.BytesIO()
+    with zf.ZipFile(buf, "w") as z:
+        z.writestr("SKILL.md", skill_md.encode("utf-8"))
+    buf.seek(0)
+
+    skm.CLAUDE_DIR.mkdir(exist_ok=True)
+    (skm.CLAUDE_DIR / f"{trigger}.skill").write_bytes(buf.read())
+
+    return JSONResponse({"ok": True, "trigger": trigger})
 
 
 @app.post("/api/persona")

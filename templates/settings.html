@@ -29,7 +29,7 @@
       <div class="settings-nav-label">Settings</div>
       <button class="settings-nav-item" data-panel="connection">Connection</button>
       <button class="settings-nav-item" data-panel="data">Data</button>
-      <button class="settings-nav-item" data-panel="skills">Skills</button>
+      <button class="settings-nav-item" data-panel="personas">Personas</button>
       <button class="settings-nav-item" data-panel="digest">Digest</button>
     </nav>
 
@@ -330,38 +330,104 @@
         </form>
       </div><!-- /panel-data -->
 
-      <!-- ── Skills panel ───────────────────────────────────────────── -->
-      <div id="panel-skills" class="settings-panel">
+      <!-- ── Personas panel ─────────────────────────────────────────── -->
+      <div id="panel-personas" class="settings-panel">
 
         <div class="settings-panel-header">
-          <h1 class="settings-panel-title">Skills &amp; Personas</h1>
-          <p class="settings-panel-desc">Upload <strong>.json</strong> prompt skills or <strong>.skill</strong> coaching personas. Skills appear instantly in the chat's <code>/</code> picker.</p>
+          <h1 class="settings-panel-title">Personas</h1>
+          <p class="settings-panel-desc">Install coaching personas (<strong>.skill</strong>) and prompt shortcuts (<strong>.json</strong>). Both appear in the chat's <code>/</code> picker instantly.</p>
         </div>
 
+        <!-- Install from file -->
         <div class="settings-card" style="max-width:520px;">
-          <div class="skill-upload-area" id="skill-upload-area">
-            <span class="skill-upload-label">Drop a file here or click to browse</span>
+          <div class="form-section-title">Install from file</div>
+          <div class="skill-upload-area" id="skill-upload-area" style="margin-top:12px;">
+            <span class="skill-upload-label">Drop a .skill or .json file here, or click to browse</span>
             <input type="file" id="skill-file-input" class="skill-file-input" accept=".skill,.json" />
           </div>
           <div class="upload-status" id="upload-status"></div>
+        </div>
 
-          {% if skills %}
-          <div class="skill-list" style="margin-top:20px;">
-            {% for skill in skills %}
-            <div class="skill-list-item {% if skill.type == 'persona' %}persona-skill{% endif %}">
-              <span class="skill-list-trigger">
-                {% if skill.type == "persona" %}⚡{% else %}/{% endif %}{{ skill.trigger }}
-              </span>
+        {% set persona_skills = skills | selectattr("type", "equalto", "persona") | list %}
+        {% set prompt_skills  = skills | selectattr("type", "equalto", "prompt")  | list %}
+
+        <!-- Installed Personas -->
+        {% if persona_skills %}
+        <div class="settings-card" style="max-width:520px; margin-top:20px;">
+          <div class="form-section-title">Installed Personas</div>
+          <p style="font-size:12px; color:var(--muted); margin-top:4px;">Click a persona to preview its instructions.</p>
+          <div class="skill-list" style="margin-top:12px;">
+            {% for skill in persona_skills %}
+            <div class="skill-list-item persona-skill persona-preview-trigger"
+                 data-trigger="{{ skill.trigger }}" style="cursor:pointer;">
+              <span class="skill-list-trigger">⚡{{ skill.trigger }}</span>
               <span class="skill-list-desc">{{ skill.description }}</span>
             </div>
             {% endfor %}
           </div>
-          {% else %}
-          <p style="font-size:13px; color:var(--muted); margin-top:16px;">No skills installed yet.</p>
-          {% endif %}
+          <textarea id="persona-preview-box"
+                    style="display:none; margin-top:12px; width:100%; min-height:120px;
+                           font-size:12px; font-family:monospace; background:var(--surface);
+                           color:var(--text); border:1px solid var(--border); border-radius:6px;
+                           padding:10px; resize:vertical; box-sizing:border-box;"
+                    readonly></textarea>
+        </div>
+        {% endif %}
+
+        <!-- Prompt Shortcuts -->
+        {% if prompt_skills %}
+        <div class="settings-card" style="max-width:520px; margin-top:20px;">
+          <div class="form-section-title">Prompt Shortcuts</div>
+          <div class="skill-list" style="margin-top:12px;">
+            {% for skill in prompt_skills %}
+            <div class="skill-list-item">
+              <span class="skill-list-trigger">/{{ skill.trigger }}</span>
+              <span class="skill-list-desc">{{ skill.description }}</span>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        {% if not skills %}
+        <div class="settings-card" style="max-width:520px; margin-top:20px;">
+          <p style="font-size:13px; color:var(--muted);">No personas or shortcuts installed yet.</p>
+        </div>
+        {% endif %}
+
+        <!-- Create New Persona -->
+        <div class="settings-card" style="max-width:520px; margin-top:20px;">
+          <div class="form-section-title">Create New Persona</div>
+          <p style="font-size:12px; color:var(--muted); margin-top:4px;">Define a coaching persona inline — no file upload needed.</p>
+          <div style="display:flex; flex-direction:column; gap:14px; margin-top:14px;">
+            <div class="form-group">
+              <label for="new-persona-trigger">Trigger name</label>
+              <input type="text" id="new-persona-trigger"
+                     placeholder="e.g. drill-sergeant" style="max-width:240px;" />
+              <p style="font-size:11px; color:var(--muted); margin-top:3px;">Lowercase, no spaces (hyphens OK). Type /trigger in chat to activate.</p>
+            </div>
+            <div class="form-group">
+              <label for="new-persona-description">Short description</label>
+              <input type="text" id="new-persona-description"
+                     placeholder="Shown next to the trigger in the / picker" />
+            </div>
+            <div class="form-group">
+              <label for="new-persona-content">Persona instructions</label>
+              <textarea id="new-persona-content" rows="6"
+                        placeholder="Describe how the coach should behave, e.g.:&#10;You are a tough but fair drill instructor. Respond with military precision and push the user to their limits..."
+                        style="width:100%; box-sizing:border-box; font-size:13px;
+                               background:var(--surface); color:var(--text);
+                               border:1px solid var(--border); border-radius:6px;
+                               padding:10px; resize:vertical;"></textarea>
+            </div>
+          </div>
+          <div style="margin-top:16px; display:flex; gap:10px; align-items:center;">
+            <button type="button" id="create-persona-btn" class="btn-primary">Create Persona</button>
+            <span id="create-persona-status" style="font-size:13px;"></span>
+          </div>
         </div>
 
-      </div><!-- /panel-skills -->
+      </div><!-- /panel-personas -->
 
       <!-- ── Digest panel ───────────────────────────────────────────── -->
       <div id="panel-digest" class="settings-panel">
@@ -485,7 +551,7 @@
     else if (error && error !== "passwords_mismatch" && error !== "missing_fields") initialPanel = "digest";
     else {
       var hash = window.location.hash.slice(1);
-      if (["connection", "data", "skills", "digest"].indexOf(hash) !== -1) initialPanel = hash;
+      if (["connection", "data", "personas", "digest"].indexOf(hash) !== -1) initialPanel = hash;
     }
     showPanel(initialPanel);
 
@@ -593,6 +659,69 @@
       _populateModels(_providerSel.value);
       _onProviderChange();
       _providerSel.addEventListener("change", _onProviderChange);
+    }
+
+    /* ── Persona preview ─────────────────────────────────────────── */
+    var PERSONA_BODIES    = {{ persona_bodies | safe }};
+    var personaPreviewBox = document.getElementById("persona-preview-box");
+
+    document.querySelectorAll(".persona-preview-trigger").forEach(function(el) {
+      el.addEventListener("click", function() {
+        var trigger = el.dataset.trigger;
+        var body    = PERSONA_BODIES[trigger] || "(no instructions found)";
+        if (personaPreviewBox) {
+          personaPreviewBox.style.display = "block";
+          personaPreviewBox.value = body;
+        }
+        document.querySelectorAll(".persona-preview-trigger").forEach(function(e) {
+          e.style.background = "";
+        });
+        el.style.background = "var(--hover, rgba(255,255,255,0.06))";
+      });
+    });
+
+    /* ── Create persona ──────────────────────────────────────────── */
+    var createPersonaBtn    = document.getElementById("create-persona-btn");
+    var createPersonaStatus = document.getElementById("create-persona-status");
+
+    if (createPersonaBtn) {
+      createPersonaBtn.addEventListener("click", async function() {
+        var trigger     = (document.getElementById("new-persona-trigger").value || "").trim();
+        var description = (document.getElementById("new-persona-description").value || "").trim();
+        var content     = (document.getElementById("new-persona-content").value || "").trim();
+        if (!trigger) {
+          createPersonaStatus.textContent = "\u2717 Trigger name is required.";
+          createPersonaStatus.style.color = "#7f1d1d"; return;
+        }
+        if (!content) {
+          createPersonaStatus.textContent = "\u2717 Instructions are required.";
+          createPersonaStatus.style.color = "#7f1d1d"; return;
+        }
+        createPersonaBtn.disabled = true;
+        createPersonaStatus.textContent = "Creating\u2026";
+        createPersonaStatus.style.color = "var(--muted)";
+        var fd = new FormData();
+        fd.append("trigger",     trigger);
+        fd.append("description", description);
+        fd.append("content",     content);
+        try {
+          var res  = await fetch("/api/create-persona", { method: "POST", body: fd });
+          var data = await res.json();
+          if (data.ok) {
+            createPersonaStatus.textContent = "\u2713 Persona '" + data.trigger + "' created \u2014 reloading\u2026";
+            createPersonaStatus.style.color = "#065f46";
+            setTimeout(function() { window.location.reload(); }, 900);
+          } else {
+            createPersonaStatus.textContent = "\u2717 " + (data.error || "Failed.");
+            createPersonaStatus.style.color = "#7f1d1d";
+            createPersonaBtn.disabled = false;
+          }
+        } catch (e) {
+          createPersonaStatus.textContent = "\u2717 Network error: " + e.message;
+          createPersonaStatus.style.color = "#7f1d1d";
+          createPersonaBtn.disabled = false;
+        }
+      });
     }
 
     /* ── Daily Digest test send ───────────────────────────────────── */
