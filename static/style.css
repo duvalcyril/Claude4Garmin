@@ -458,29 +458,83 @@ html, body {
 }
 .btn-link:hover { color: var(--text); }
 
-/* ── Settings page ────────────────────────────────────────────────── */
-.settings-page {
-  min-height: calc(100vh - var(--header-h));
-  padding-top: calc(var(--header-h) + 40px);
+/* ── Settings layout (sidebar nav + content) ─────────────────────── */
+.settings-shell {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 24px;
-  padding-bottom: 60px;
+  height: calc(100vh - var(--header-h));
+  overflow: hidden;
 }
+
+.settings-nav {
+  width: 200px;
+  flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 24px 0;
+  overflow-y: auto;
+}
+
+.settings-nav-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 0 20px 16px;
+}
+
+.settings-nav-item {
+  display: block;
+  width: 100%;
+  padding: 9px 20px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-left: 3px solid transparent;
+  transition: background .1s, color .1s;
+}
+.settings-nav-item:hover { background: var(--bg); }
+.settings-nav-item.active {
+  background: #eff6ff;
+  color: var(--accent);
+  border-left-color: var(--accent);
+  font-weight: 600;
+}
+
+.settings-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 36px 48px;
+  background: var(--bg);
+}
+
+.settings-panel { display: none; max-width: 920px; }
+.settings-panel.active { display: block; }
+
+.settings-panel-header { margin-bottom: 24px; }
+.settings-panel-title  { font-size: 22px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+.settings-panel-desc   { font-size: 14px; color: var(--muted); line-height: 1.5; }
 
 .settings-card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 32px 36px;
-  width: 100%;
-  max-width: 520px;
+  padding: 24px 28px;
   height: fit-content;
 }
 
-.settings-title    { font-size: 20px; font-weight: 600; margin-bottom: 6px; }
-.settings-subtitle { color: var(--muted); margin-bottom: 24px; line-height: 1.5; }
+.settings-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+.settings-stack { display: flex; flex-direction: column; gap: 16px; }
 
 /* Status banners */
 .banner {
