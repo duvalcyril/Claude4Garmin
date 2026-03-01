@@ -1,0 +1,5 @@
+{
+  "trigger": "sleep-analysis",
+  "description": "Deep dive into your sleep patterns and quality",
+  "prompt": "Analyze my sleep data in detail. What patterns do you see across the week? Are my deep sleep and REM percentages in a healthy range? Which nights were best and worst, and what might explain the differences?"
+}

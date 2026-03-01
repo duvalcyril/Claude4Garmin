@@ -29,7 +29,9 @@ class ClaudeCoach:
         self.client = Anthropic()
         self.async_client = AsyncAnthropic()
         self.history: list[dict] = []
-        self.system_prompt = self._build_system_prompt(health_summary)
+        self._base_system_prompt = self._build_system_prompt(health_summary)
+        self._persona_content: str | None = None
+        self.system_prompt = self._base_system_prompt
 
     def _build_system_prompt(self, health_summary: str) -> str:
         return f"""You are a personal health and fitness coach with access to the user's recent Garmin wearable data.
@@ -46,6 +48,24 @@ Here is the user's Garmin health data for the past 7 days:
 {health_summary}
 
 Use this data to answer questions and give personalized recommendations."""
+
+    def set_persona(self, persona_content: str) -> None:
+        """Overlay a coaching persona on the base system prompt."""
+        self._persona_content = persona_content
+        self.system_prompt = (
+            self._base_system_prompt
+            + "\n\n---\n\n"
+            + persona_content
+        )
+
+    def clear_persona(self) -> None:
+        """Remove the active persona and restore the base system prompt."""
+        self._persona_content = None
+        self.system_prompt = self._base_system_prompt
+
+    @property
+    def active_persona(self) -> bool:
+        return self._persona_content is not None
 
     def chat(self, user_message: str) -> str:
         """

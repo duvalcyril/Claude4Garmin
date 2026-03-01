@@ -1,0 +1,5 @@
+{
+  "trigger": "activity-summary",
+  "description": "Overview of recent workouts and training load",
+  "prompt": "Summarize my recent activities. Am I training consistently? Is my workload balanced across the week? Based on my recovery metrics, am I overdoing it or could I safely do more?"
+}

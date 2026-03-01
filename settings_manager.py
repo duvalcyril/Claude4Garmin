@@ -4,11 +4,15 @@ Settings are stored as JSON in settings.json (project directory).
 Non-sensitive values — not stored in the OS keychain.
 
 Settings structure (all keys with defaults):
-  days_back              int   — how many days of history to fetch
-  daily_stats_enabled    bool  — include daily stats section
-  sleep_enabled          bool  — include sleep section
-  activities_enabled     bool  — include activities section
-  activity_count         int   — how many recent activities to fetch
+  days_back                    int   — how many days of history to fetch
+  daily_stats_enabled          bool  — include daily stats section
+  sleep_enabled                bool  — include sleep section
+  activities_enabled           bool  — include activities section
+  activity_count               int   — how many recent activities to fetch
+  hrv_enabled                  bool  — include HRV per-day in daily stats
+  training_readiness_enabled   bool  — include Training Readiness per-day
+  training_status_enabled      bool  — include rolling Training Status label
+  body_enabled                 bool  — include body composition section
 
   metric_steps           bool  — show steps in daily stats
   metric_calories_total  bool  — show total calories
@@ -23,6 +27,10 @@ Settings structure (all keys with defaults):
   metric_sleep_light     bool  — show light sleep
   metric_sleep_rem       bool  — show REM sleep
   metric_sleep_score     bool  — show sleep score
+
+  metric_body_weight     bool  — show weight
+  metric_body_fat        bool  — show body fat %
+  metric_body_muscle     bool  — show muscle mass
 """
 
 import json
@@ -37,6 +45,10 @@ DEFAULTS: dict = {
     "sleep_enabled": True,
     "activities_enabled": True,
     "activity_count": 10,
+    "hrv_enabled": True,
+    "training_readiness_enabled": True,
+    "training_status_enabled": True,
+    "body_enabled": True,
     # Daily stats metric toggles
     "metric_steps": True,
     "metric_calories_total": True,
@@ -51,6 +63,10 @@ DEFAULTS: dict = {
     "metric_sleep_light": True,
     "metric_sleep_rem": True,
     "metric_sleep_score": True,
+    # Body composition metric toggles
+    "metric_body_weight": True,
+    "metric_body_fat": True,
+    "metric_body_muscle": True,
 }
 
 

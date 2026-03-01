@@ -28,8 +28,15 @@
     <!-- Sidebar: health data -->
     <aside class="sidebar">
       <div class="sidebar-header">
-        Health Summary
-        {% if health_data %}<span class="sidebar-fetch-date">{{ health_data.fetch_date | fmt_date }}</span>{% endif %}
+        <div class="sidebar-header-row">
+          <span>Health Summary</span>
+          {% if health_data %}<span class="sidebar-fetch-date">{{ health_data.fetch_date | fmt_date }}</span>{% endif %}
+        </div>
+        {% if health_data and health_data.training_status and health_data.training_status.label %}
+        <div class="training-status-badge training-status-{{ health_data.training_status.label | lower | replace(' ', '-') }}">
+          Training Status: {{ health_data.training_status.label }}
+        </div>
+        {% endif %}
       </div>
 
       <div class="sidebar-body">
@@ -78,6 +85,28 @@
                   <span class="metric-label">Distance</span>
                   <span class="metric-value">{{ (day.distance_m / 1000) | round(1) }} km</span>
                 </div>
+                {% endif %}
+                {% if health_data.hrv %}
+                  {% set hrv_entry = health_data.hrv | selectattr("date", "equalto", day.date) | list | first %}
+                  {% if hrv_entry and hrv_entry.last_night_avg %}
+                  <div class="metric-row">
+                    <span class="metric-label">HRV</span>
+                    <span class="metric-value">{{ hrv_entry.last_night_avg | int }} ms
+                      {% if hrv_entry.status %}<span class="hrv-status hrv-{{ hrv_entry.status | lower }}">{{ hrv_entry.status | title }}</span>{% endif %}
+                    </span>
+                  </div>
+                  {% endif %}
+                {% endif %}
+                {% if health_data.training_readiness %}
+                  {% set tr_entry = health_data.training_readiness | selectattr("date", "equalto", day.date) | list | first %}
+                  {% if tr_entry and tr_entry.score is not none %}
+                  <div class="metric-row">
+                    <span class="metric-label">Readiness</span>
+                    <span class="metric-value">{{ tr_entry.score }}/100
+                      {% if tr_entry.level %}<span class="readiness-level readiness-{{ tr_entry.level | lower }}">{{ tr_entry.level | title }}</span>{% endif %}
+                    </span>
+                  </div>
+                  {% endif %}
                 {% endif %}
               </div>
             </div>
@@ -156,6 +185,38 @@
         </div>
         {% endif %}
 
+        <!-- ── Body Composition ─────────────────────────────────── -->
+        {% if health_data and health_data.body_composition %}
+        <div class="data-section">
+          <div class="data-section-title">Body Composition</div>
+          {% for entry in health_data.body_composition[:3] %}
+          <div class="day-card">
+            <div class="day-date">{{ entry.date | fmt_date }}</div>
+            <div class="day-metrics">
+              {% if entry.weight_kg is not none %}
+              <div class="metric-row">
+                <span class="metric-label">Weight</span>
+                <span class="metric-value">{{ entry.weight_kg | round(1) }} kg</span>
+              </div>
+              {% endif %}
+              {% if entry.body_fat_pct is not none %}
+              <div class="metric-row">
+                <span class="metric-label">Body Fat</span>
+                <span class="metric-value">{{ entry.body_fat_pct | round(1) }}%</span>
+              </div>
+              {% endif %}
+              {% if entry.muscle_mass_kg is not none %}
+              <div class="metric-row">
+                <span class="metric-label">Muscle</span>
+                <span class="metric-value">{{ entry.muscle_mass_kg | round(1) }} kg</span>
+              </div>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+
       </div>
     </aside>
 
@@ -173,14 +234,26 @@
 
       <!-- Input area -->
       <div class="input-area">
+
+        <!-- Skill picker — shown when user types / -->
+        <div class="skill-picker" id="skill-picker" hidden>
+          <div class="skill-picker-list" id="skill-picker-list"></div>
+        </div>
+
         <div class="input-row">
           <textarea
             id="msg-input"
             class="msg-input"
-            placeholder="Ask your coach something..."
+            placeholder="Ask your coach something… or type / for skills"
             rows="1"
             autofocus
           ></textarea>
+          <!-- Compact persona chip — appears between textarea and Send when a persona is active -->
+          <div class="persona-chip" id="persona-badge" hidden>
+            <span>⚡</span>
+            <span id="persona-badge-name"></span>
+            <button class="persona-chip-clear" id="persona-badge-clear" title="Deactivate persona">×</button>
+          </div>
           <button class="btn-send" id="btn-send">Send</button>
         </div>
         <div class="input-actions">

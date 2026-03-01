@@ -23,7 +23,7 @@ import threading
 import webbrowser
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -32,6 +32,7 @@ from dotenv import load_dotenv
 
 import credentials_manager as cm
 import settings_manager as sm
+import skills_manager as skm
 from garmin_client import get_garmin_client, fetch_health_data, format_health_summary
 from claude_client import ClaudeCoach
 
@@ -172,6 +173,7 @@ async def settings_page(request: Request, error: str = "", success: str = ""):
         "error": error,
         "success": success,
         "data_settings": sm.load_settings(),
+        "skills": skm.load_skills(),
     })
 
 
@@ -190,6 +192,9 @@ async def api_status():
 
 class ChatRequest(BaseModel):
     message: str
+
+class PersonaRequest(BaseModel):
+    trigger: str
 
 
 @app.post("/api/chat")
@@ -213,6 +218,62 @@ async def api_chat(body: ChatRequest):
 async def api_reset():
     if coach:
         coach.reset_history()
+    return JSONResponse({"ok": True})
+
+
+@app.get("/api/skills")
+async def api_skills():
+    return JSONResponse(skm.load_skills())
+
+
+@app.post("/api/upload-skill")
+async def api_upload_skill(file: UploadFile = File(...)):
+    """Save an uploaded .skill (persona) or .json (prompt) skill file to the right directory."""
+    from pathlib import Path
+    filename = Path(file.filename).name  # strip any path components
+
+    if not filename:
+        raise HTTPException(400, detail="No filename provided.")
+
+    content = await file.read()
+
+    if filename.endswith(".skill"):
+        dest_dir = skm.CLAUDE_DIR
+        dest_dir.mkdir(exist_ok=True)
+        (dest_dir / filename).write_bytes(content)
+        return JSONResponse({"ok": True, "type": "persona", "filename": filename})
+
+    elif filename.endswith(".json"):
+        try:
+            data = json.loads(content)
+        except ValueError:
+            raise HTTPException(400, detail="Invalid JSON file.")
+        if "trigger" not in data or "prompt" not in data:
+            raise HTTPException(400, detail='Skill JSON must have "trigger" and "prompt" fields.')
+        dest_dir = skm.SKILLS_DIR
+        dest_dir.mkdir(exist_ok=True)
+        (dest_dir / filename).write_bytes(content)
+        return JSONResponse({"ok": True, "type": "prompt", "filename": filename})
+
+    else:
+        raise HTTPException(400, detail="Unsupported file type. Upload a .skill or .json file.")
+
+
+@app.post("/api/persona")
+async def api_set_persona(body: PersonaRequest):
+    if not coach:
+        raise HTTPException(503, detail="Coach not ready.")
+    skill = skm.get_skill_by_trigger(body.trigger)
+    if not skill or skill.get("type") != "persona":
+        raise HTTPException(404, detail="Persona skill not found.")
+    coach.set_persona(skill["content"])
+    return JSONResponse({"ok": True, "trigger": skill["trigger"]})
+
+
+@app.post("/api/persona/clear")
+async def api_clear_persona():
+    if coach:
+        coach.clear_persona()
     return JSONResponse({"ok": True})
 
 
@@ -275,6 +336,10 @@ async def api_save_data_settings(request: Request):
         "sleep_enabled": "sleep_enabled" in form,
         "activities_enabled": "activities_enabled" in form,
         "activity_count": int(form.get("activity_count", 10)),
+        "hrv_enabled": "hrv_enabled" in form,
+        "training_readiness_enabled": "training_readiness_enabled" in form,
+        "training_status_enabled": "training_status_enabled" in form,
+        "body_enabled": "body_enabled" in form,
         "metric_steps": "metric_steps" in form,
         "metric_calories_total": "metric_calories_total" in form,
         "metric_calories_active": "metric_calories_active" in form,
@@ -287,6 +352,9 @@ async def api_save_data_settings(request: Request):
         "metric_sleep_light": "metric_sleep_light" in form,
         "metric_sleep_rem": "metric_sleep_rem" in form,
         "metric_sleep_score": "metric_sleep_score" in form,
+        "metric_body_weight": "metric_body_weight" in form,
+        "metric_body_fat": "metric_body_fat" in form,
+        "metric_body_muscle": "metric_body_muscle" in form,
     }
 
     sm.save_settings(settings)

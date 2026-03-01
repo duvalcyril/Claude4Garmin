@@ -1,0 +1,5 @@
+{
+  "trigger": "recovery-check",
+  "description": "Training readiness based on body battery, HRR, and sleep",
+  "prompt": "Based on my body battery, resting heart rate, sleep scores, and stress levels this week — how well am I recovering? Am I ready for a hard training session today, or should I take it easier?"
+}

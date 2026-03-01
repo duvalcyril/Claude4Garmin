@@ -10,18 +10,22 @@ On startup, the app connects to your Garmin Connect account, fetches your health
 
 **Data fetched from Garmin Connect:**
 - Daily steps, total and active calories, distance
-- Average and max stress levels
-- Body battery (most recent value per day)
+- Average and max stress levels, body battery
 - Resting heart rate
+- HRV — overnight average, weekly baseline, and status label (Balanced / Low / Unbalanced)
+- Training Readiness — Garmin's 0–100 daily composite score (HRV + sleep + recovery + load)
+- Training Status — rolling label (Productive, Peaking, Maintaining, Recovery, Strained, etc.)
 - Sleep breakdown — total, deep, REM, light, and sleep score
 - Recent activities — type, duration, distance, average HR, calories
+- Body composition — weight, body fat %, and muscle mass from a smart scale
 
 **What you can ask:**
 - *"How has my sleep been this week?"*
 - *"My stress has been high — what do you recommend?"*
 - *"Am I recovering well enough to train hard tomorrow?"*
 - *"Which day this week had my best body battery?"*
-- *"Compare my activity level to my sleep quality."*
+- *"My training status is Strained — should I take a rest day?"*
+- *"How is my body composition trending over the past month?"*
 
 Claude maintains the full conversation history so follow-up questions work naturally.
 
@@ -91,11 +95,12 @@ python main.py
 
 | Element | What it does |
 |---|---|
-| Sidebar | Live structured view of your Garmin data — daily stats, sleep, activities |
+| Sidebar | Live structured view of your Garmin data — training status badge, daily stats (with HRV and readiness), sleep, activities, body composition |
 | Chat panel | Ask Claude anything about your health data; responses stream in real time |
+| `/` picker | Type `/` in the chat input to browse and invoke coaching skills and personas |
 | Refresh data | Re-fetch Garmin data without restarting the server |
 | Reset conversation | Clear chat history while keeping your Garmin data context |
-| Settings | Update credentials or change data sync preferences |
+| Settings | Update credentials, change data sync preferences, upload skills and personas |
 
 ### CLI commands
 
@@ -124,12 +129,27 @@ In the web UI, go to **Settings → Data Preferences** to configure:
 
 - **Time range** — 7, 14, or 30 days of history
 - **Daily Stats** — toggle the whole section and individual metrics (steps, calories, stress, body battery, resting HR, distance)
-- **Sleep** — toggle the whole section and individual metrics (total duration, deep, REM, light sleep, sleep score)
+- **Sleep** — toggle the whole section and individual metrics (total duration, deep, REM, light, sleep score)
 - **Activities** — toggle the whole section and choose how many recent activities to include (5, 10, or 20)
+- **HRV** — overnight HRV average, weekly baseline, and status label added to each daily stats card
+- **Training Readiness** — 0–100 readiness score and level added to each daily stats card
+- **Training Status** — rolling training load label shown in the sidebar header
+- **Body Composition** — weight, body fat %, and muscle mass from a smart scale (toggle individual metrics)
 
-Changes take effect immediately — the app re-fetches your data and rebuilds the coach's context after saving. Disabled categories are skipped at the API level (fewer calls), while disabled individual metrics are omitted from Claude's context but still visible in the sidebar.
+Changes take effect immediately — the app re-fetches your data and rebuilds the coach's context after saving.
 
 Preferences are stored in `settings.json` in the project directory (excluded from Git).
+
+---
+
+## Claude Skills & Personas
+
+Type `/` in the chat input to open the skill picker. Two types are supported:
+
+- **Prompt skills** (`.json`) — expand a pre-written prompt into the textarea for review and editing before sending. Good for structured analyses like weekly reports or training plan requests.
+- **Personas** (`.skill`) — overlay the coach's system prompt with a coaching persona, shifting Claude's style and focus for the entire conversation. A chip in the input row shows the active persona; click × to deactivate.
+
+Upload skills and personas from **Settings → Skills & Personas** (drag-and-drop or browse). Installed skills appear in the list immediately.
 
 ---
 
@@ -140,16 +160,19 @@ garmin-health-coach/
 ├── server.py               # Web entry point — FastAPI app, all routes
 ├── main.py                 # CLI entry point — terminal chat loop
 ├── garmin_client.py        # Garmin Connect auth, data fetching, formatting
-├── claude_client.py        # Claude API wrapper with streaming and history
+├── claude_client.py        # Claude API wrapper with streaming, history, personas
 ├── credentials_manager.py  # OS keychain read/write via the keyring library
 ├── settings_manager.py     # Data sync preferences stored in settings.json
+├── skills_manager.py       # Loads prompt skills (.json) and personas (.skill)
 ├── setup_ui.py             # Interactive credential setup wizard (rich + getpass)
 ├── templates/
 │   ├── index.html          # Main chat UI — split panel with sidebar + chat
-│   └── settings.html       # Settings page — credentials and data preferences
+│   └── settings.html       # Settings page — credentials, data prefs, skills
 ├── static/
 │   ├── style.css           # App styles
-│   └── app.js              # SSE streaming consumer and chat logic
+│   └── app.js              # SSE streaming consumer, chat logic, skill picker
+├── skills/                 # Prompt skill JSON files
+├── .claude/                # Persona .skill files (Claude ZIP format)
 ├── requirements.txt
 ├── .env.example            # Reference for environment variable names (optional fallback)
 ├── .gitignore
@@ -181,7 +204,7 @@ Your email or password is incorrect. Go to Settings in the web UI (or run `pytho
 Check that your API key is valid and has available credits at [console.anthropic.com](https://console.anthropic.com).
 
 **Missing data fields**
-Not all Garmin devices record all metrics. Fields that are unavailable show as `[no data]` in the sidebar and are omitted from Claude's context — they don't cause errors.
+Not all Garmin devices record all metrics. Fields that are unavailable show as `[no data]` in the sidebar and are omitted from Claude's context — they don't cause errors. Body composition requires a Garmin-compatible smart scale.
 
 **Garmin session expired**
 The `.garth_session/` folder holds OAuth tokens that can expire. If login fails despite correct credentials, delete that folder and run the app again to trigger a fresh login.
@@ -200,9 +223,11 @@ Another process is using port 8000. Either stop that process or edit `server.py`
 
 See [ROADMAP.md](ROADMAP.md) for the full list. The main planned additions are:
 
-**MacroFactor nutrition integration** — Connect your food log data so Claude can coach across the full picture: training, recovery, and fueling. MacroFactor doesn't have a public API, but supports CSV export which the app will be able to read.
+**HR time-in-zones** — Zone breakdown per activity (Z1–Z5 minutes) so Claude can analyse aerobic vs. anaerobic distribution and flag if easy runs are drifting out of Zone 2.
 
-**Claude Skills** — Define and invoke pre-built coaching skills directly in the chat (e.g. `/weekly-report`, `/training-plan`, `/sleep-analysis`). Reusable prompt templates that unlock structured, deeper analysis on demand.
+**Race predictions & Cycling FTP** — Garmin's estimated race times (5k–marathon) and functional threshold power for deeper performance context.
+
+**MacroFactor nutrition integration** — Connect your food log data so Claude can coach across the full picture: training, recovery, and fueling. MacroFactor supports CSV export which the app will be able to read.
 
 ---
 

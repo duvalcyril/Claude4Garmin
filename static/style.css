@@ -79,7 +79,7 @@ html, body {
 }
 
 .sidebar-header {
-  padding: 12px 16px;
+  padding: 10px 16px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: .06em;
@@ -87,6 +87,12 @@ html, body {
   color: var(--muted);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sidebar-header-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -100,6 +106,59 @@ html, body {
   color: var(--muted);
   opacity: .7;
 }
+
+/* Training Status badge in sidebar header */
+.training-status-badge {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--border);
+  color: var(--muted);
+}
+.training-status-productive  { background: #d1fae5; color: #065f46; }
+.training-status-peaking      { background: #ede9fe; color: #4c1d95; }
+.training-status-maintaining  { background: #dbeafe; color: #1e3a8a; }
+.training-status-recovery     { background: #fef3c7; color: #92400e; }
+.training-status-unproductive { background: #fee2e2; color: #7f1d1d; }
+.training-status-strained     { background: #fecaca; color: #7f1d1d; }
+.training-status-detraining   { background: #f3f4f6; color: #6b7280; }
+.training-status-overreaching { background: #fecaca; color: #7f1d1d; }
+
+/* HRV status chip */
+.hrv-status {
+  display: inline-block;
+  margin-left: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 8px;
+  text-transform: capitalize;
+  background: var(--border);
+  color: var(--muted);
+}
+.hrv-balanced   { background: #d1fae5; color: #065f46; }
+.hrv-low        { background: #fee2e2; color: #7f1d1d; }
+.hrv-unbalanced { background: #fef3c7; color: #92400e; }
+
+/* Training Readiness level chip */
+.readiness-level {
+  display: inline-block;
+  margin-left: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 8px;
+  text-transform: capitalize;
+  background: var(--border);
+  color: var(--muted);
+}
+.readiness-high      { background: #d1fae5; color: #065f46; }
+.readiness-very_high { background: #a7f3d0; color: #065f46; }
+.readiness-moderate  { background: #dbeafe; color: #1e3a8a; }
+.readiness-low       { background: #fee2e2; color: #7f1d1d; }
 
 .sidebar-body {
   flex: 1;
@@ -258,7 +317,87 @@ html, body {
   border-top: 1px solid var(--border);
   background: var(--surface);
   padding: 14px 20px 16px;
+  position: relative;
 }
+
+/* ── Skill picker ──────────────────────────────────────────────────── */
+.skill-picker {
+  position: absolute;
+  bottom: calc(100% - 14px); /* sit just above the input area top edge */
+  left: 20px;
+  right: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.12);
+  overflow: hidden;
+  z-index: 200;
+}
+
+.skill-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 14px;
+  cursor: pointer;
+  transition: background .1s;
+}
+.skill-item:hover,
+.skill-item.active { background: var(--bg); }
+
+.skill-trigger {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+  min-width: 130px;
+}
+
+/* Persona-type skills get a distinct trigger colour */
+.skill-item.persona .skill-trigger { color: #7c3aed; }
+
+.skill-desc {
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Active persona chip (inline in input row) ─────────────────────── */
+.persona-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #ede9fe;
+  border: 1px solid #c4b5fd;
+  border-radius: 6px;
+  padding: 0 8px;
+  height: 40px;           /* matches .btn-send height */
+  font-size: 11px;
+  font-weight: 600;
+  color: #5b21b6;
+  white-space: nowrap;
+  flex-shrink: 0;
+  max-width: 160px;
+}
+.persona-chip span:last-of-type {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.persona-chip-clear {
+  background: none;
+  border: none;
+  color: #7c3aed;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  opacity: .6;
+  transition: opacity .15s;
+  margin-left: 2px;
+}
+.persona-chip-clear:hover { opacity: 1; }
 
 .input-row {
   display: flex;
@@ -456,4 +595,71 @@ html, body {
   accent-color: var(--accent);
   cursor: pointer;
   flex-shrink: 0;
+}
+
+/* ── Skills & Personas settings card ─────────────────────────────── */
+.skill-upload-area {
+  border: 2px dashed var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  text-align: center;
+  transition: border-color .15s;
+}
+.skill-upload-area.drag-over { border-color: var(--accent); }
+
+.skill-upload-label {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+
+.skill-file-input {
+  display: block;
+  margin: 0 auto;
+  font-size: 13px;
+}
+
+.upload-status {
+  margin-top: 10px;
+  font-size: 13px;
+  min-height: 1.4em;
+}
+.upload-status.ok  { color: var(--success-text); }
+.upload-status.err { color: var(--error-text); }
+
+.skill-list {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.skill-list-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 14px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.skill-list-item:last-child { border-bottom: none; }
+
+.skill-list-trigger {
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--accent);
+}
+.skill-list-item.persona-skill .skill-list-trigger { color: #7c3aed; }
+
+.skill-list-desc {
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

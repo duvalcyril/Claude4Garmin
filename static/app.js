@@ -11,13 +11,116 @@
  *   7. Input is re-enabled
  */
 
-const messagesEl = document.getElementById("messages");
-const inputEl    = document.getElementById("msg-input");
-const sendBtn    = document.getElementById("btn-send");
-const resetBtn   = document.getElementById("btn-reset");
-const refreshBtn = document.getElementById("btn-refresh");
+const messagesEl   = document.getElementById("messages");
+const inputEl      = document.getElementById("msg-input");
+const sendBtn      = document.getElementById("btn-send");
+const resetBtn     = document.getElementById("btn-reset");
+const refreshBtn   = document.getElementById("btn-refresh");
+const pickerEl     = document.getElementById("skill-picker");
+const pickerListEl = document.getElementById("skill-picker-list");
+const personaBadgeEl   = document.getElementById("persona-badge");
+const personaBadgeName = document.getElementById("persona-badge-name");
+const personaClearBtn  = document.getElementById("persona-badge-clear");
 
 let isStreaming = false;
+
+// ── Skill picker ─────────────────────────────────────────────────────
+
+let allSkills     = [];   // loaded once from /api/skills
+let filteredSkills = [];  // subset matching current query
+let pickerIndex   = 0;    // keyboard-selected row
+
+// Fetch skills on load so the first "/" is instant
+fetch("/api/skills")
+  .then(r => r.json())
+  .then(data => { allSkills = data; })
+  .catch(() => {});
+
+function showPicker(query) {
+  const q = query.toLowerCase();
+  filteredSkills = allSkills.filter(
+    s => s.trigger.includes(q) || s.description.toLowerCase().includes(q)
+  );
+  if (!filteredSkills.length) { hidePicker(); return; }
+  pickerIndex = 0;
+  renderPicker();
+  pickerEl.hidden = false;
+}
+
+function hidePicker() {
+  pickerEl.hidden = true;
+  filteredSkills = [];
+  pickerIndex = 0;
+}
+
+function renderPicker() {
+  pickerListEl.innerHTML = "";
+  filteredSkills.forEach((skill, i) => {
+    const item = document.createElement("div");
+    const isPersona = skill.type === "persona";
+    item.className = "skill-item"
+      + (isPersona ? " persona" : "")
+      + (i === pickerIndex ? " active" : "");
+    item.innerHTML =
+      `<span class="skill-trigger">/${skill.trigger}</span>` +
+      `<span class="skill-desc">${skill.description}</span>`;
+    item.addEventListener("mousedown", (e) => {
+      e.preventDefault(); // don't blur the input
+      applySkill(i);
+    });
+    pickerListEl.appendChild(item);
+  });
+}
+
+function updatePickerSelection(delta) {
+  pickerIndex = (pickerIndex + delta + filteredSkills.length) % filteredSkills.length;
+  renderPicker();
+}
+
+function applySkill(index) {
+  const skill = filteredSkills[index];
+  if (!skill) return;
+  hidePicker();
+  if (skill.type === "persona") {
+    activatePersona(skill);
+  } else {
+    inputEl.value = skill.prompt;
+    autoResize();
+    inputEl.focus();
+  }
+}
+
+// ── Persona activation ────────────────────────────────────────────────
+
+async function activatePersona(skill) {
+  try {
+    const res = await fetch("/api/persona", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ trigger: skill.trigger }),
+    });
+    if (res.ok) {
+      personaBadgeName.textContent = skill.trigger;
+      personaBadgeEl.hidden = false;
+      appendMessage("coach", `**${skill.trigger}** persona activated. I'll follow that coaching style for this conversation.`);
+    } else {
+      appendMessage("coach", "Could not activate persona — persona skill not found.");
+    }
+  } catch {
+    appendMessage("coach", "Network error activating persona.");
+  }
+  inputEl.value = "";
+  inputEl.focus();
+}
+
+async function clearPersona() {
+  await fetch("/api/persona/clear", { method: "POST" });
+  personaBadgeEl.hidden = true;
+  personaBadgeName.textContent = "";
+  appendMessage("coach", "Persona deactivated. Back to default coaching mode.");
+}
+
+personaClearBtn.addEventListener("click", clearPersona);
 
 // Configure marked.js: sanitize HTML, smart line breaks
 marked.setOptions({ breaks: true, gfm: true });
@@ -66,6 +169,7 @@ async function sendMessage() {
   setInputDisabled(true);
   inputEl.value = "";
   autoResize();
+  hidePicker();
 
   // Show user bubble immediately
   appendMessage("user", message);
@@ -185,9 +289,29 @@ sendBtn.addEventListener("click", sendMessage);
 resetBtn.addEventListener("click", resetConversation);
 refreshBtn.addEventListener("click", refreshData);
 
-inputEl.addEventListener("input", autoResize);
+inputEl.addEventListener("input", () => {
+  autoResize();
+  const val = inputEl.value;
+  if (val.startsWith("/") && val.length >= 1) {
+    showPicker(val.slice(1)); // pass the part after "/"
+  } else {
+    hidePicker();
+  }
+});
 
 inputEl.addEventListener("keydown", (e) => {
+  // When picker is open, intercept navigation keys
+  if (!pickerEl.hidden) {
+    if (e.key === "ArrowDown")  { e.preventDefault(); updatePickerSelection(+1); return; }
+    if (e.key === "ArrowUp")    { e.preventDefault(); updatePickerSelection(-1); return; }
+    if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
+      e.preventDefault();
+      applySkill(pickerIndex);
+      return;
+    }
+    if (e.key === "Escape")     { e.preventDefault(); hidePicker(); return; }
+  }
+
   // Send on Enter; Shift+Enter inserts a newline
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();

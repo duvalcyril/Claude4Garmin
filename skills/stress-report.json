@@ -1,0 +1,5 @@
+{
+  "trigger": "stress-report",
+  "description": "Stress patterns, triggers, and management recommendations",
+  "prompt": "Analyze my stress patterns over the past week. When is my stress highest? Does it correlate with poor sleep or low body battery? What practical steps would help me manage it better?"
+}

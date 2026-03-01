@@ -1,0 +1,5 @@
+{
+  "trigger": "weekly-report",
+  "description": "Structured summary of your week across all health metrics",
+  "prompt": "Give me a structured weekly health report covering: my activity and movement trends, sleep quality and consistency, stress and recovery patterns, and one clear recommendation for next week."
+}

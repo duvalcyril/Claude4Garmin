@@ -10,29 +10,48 @@ A collection of planned improvements, in no particular order.
 
 **Settings page** — Browser-based credential management (Garmin + Anthropic). No need to touch any files.
 
-**Configurable data import** — Time range (7 / 14 / 30 days), category toggles (daily stats, sleep, activities), and per-metric toggles. Preferences saved in `settings.json`.
+**Configurable data import** — Time range (7 / 14 / 30 days), category toggles (daily stats, sleep, activities, recovery, body composition), and per-metric toggles. Preferences saved in `settings.json`.
+
+**Claude Skills** — `/` picker in chat input for pre-built prompt skills (`.json`) and coaching personas (`.skill` files). Upload via Settings. Personas overlay the system prompt; prompt skills expand into the textarea.
+
+**HRV (Heart Rate Variability)** — Overnight HRV average and weekly baseline fetched per day. Status label (Balanced / Low / Unbalanced) shown as a colour-coded chip alongside resting HR in each daily stats card and included in the health summary.
+
+**Training Readiness** — Garmin's 0–100 composite readiness score (from HRV, sleep, recovery time, and training load) fetched per day. Score and level chip shown in each daily stats card and included in the health summary.
+
+**Training Status** — Rolling label (Productive, Peaking, Maintaining, Recovery, Unproductive, Strained, Detraining) shown as a colour-coded badge in the sidebar header and included in the health summary.
+
+**Body Composition** — Weight, body fat %, and muscle mass from a Garmin-compatible smart scale. Shown as a dedicated sidebar section (3 most recent readings). Category toggle and per-metric toggles in Data Preferences.
 
 ---
 
-## Claude Skills integration
+## Expanded Garmin data (remaining)
 
-Add support for pre-built, slash-command-style coaching skills that can be invoked directly in the chat interface.
+Data streams confirmed as relevant but not yet implemented.
 
-**What this means:**
-- Slash commands like `/weekly-report`, `/training-plan`, `/sleep-analysis`, `/recovery-check` that trigger structured, deep-dive analyses
-- Each skill is a reusable prompt template with optional parameters, assembled automatically with the right context before being sent to Claude
-- Skills can be defined locally (user-authored) or loaded from a shared library
+### Performance metrics
 
-**Why it's valuable:**
-- Surfaces insights the user might not think to ask for explicitly
-- Makes repeated analyses (e.g. weekly check-ins) one-click instead of re-typing the same prompt
-- Opens the door to more structured outputs (e.g. a formatted training plan rather than a freeform chat response)
+**HR time-in-zones per activity** — `get_activity_hr_in_timezones(activity_id)`
+For each fetched activity, pull how many minutes were spent in each HR zone (Z1–Z5). Lets Claude analyse aerobic vs anaerobic distribution across the week and flag if running stays in Zone 2 as intended.
+- Requires a second API call per activity (add after initial activity list fetch)
+- Display as a compact zone bar in the activity card (sidebar)
+- Include zone breakdown in the health summary for each activity
 
-**Implementation sketch:**
-- Skills defined as YAML or JSON files with a trigger, description, and prompt template
-- Chat input intercepts `/command` and resolves it to the full skill prompt before sending
-- A skill picker UI (e.g. `/` menu) surfaces available skills in the chat input
-- Could leverage the Anthropic SDK's tool use or structured outputs for richer responses
+**Race predictions** — `get_race_predictions()`
+Garmin's model-based estimates for 5k, 10k, half marathon, and marathon. Useful as a milestone tracker as running fitness rebuilds — Claude can reference trend direction even without precise numbers.
+- Fetch once (not per-day); add as a "Performance" section in the sidebar
+- Include in health summary: estimated times and trend vs. previous fetch
+
+**Cycling FTP** — `get_cycling_ftp()`
+Functional Threshold Power in watts. Relevant for ride intensity context if a power meter is in use. Lets Claude interpret ride effort more precisely than HR alone.
+- Fetch once; include as a static field in the sidebar and health summary
+- Only display if a non-null value is returned
+
+### Additional body metrics
+
+**Overnight respiration rate** — `get_respiration_data(cdate)`
+Average breaths per minute during sleep. Elevated respiration often correlates with illness, overtraining, or high stress before other metrics catch it.
+- Add alongside sleep metrics in the sidebar
+- Add a `metric_respiration` toggle to Data Preferences
 
 ---
 
@@ -58,7 +77,6 @@ Things to figure out:
   morning summary, and send it via email or desktop notification
 - **Trend alerts**: flag when a metric crosses a threshold (e.g. resting HR up 5+ bpm
   for 3 days, sleep score below 60 two nights in a row)
-- **HRV support**: pull HRV data if the device supports it — strong signal for recovery
 - **Conversation export**: save chat sessions to a markdown or PDF file
 - **Multiple Garmin accounts**: support family/coach use cases
 - **Custom date range**: freeform date picker in addition to the preset 7/14/30 day options

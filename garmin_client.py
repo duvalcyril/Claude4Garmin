@@ -24,6 +24,28 @@ SESSION_DIR = Path(".garth_session")
 # How many days of history to fetch
 DAYS_BACK = 7
 
+# Training status integer code → human label
+TRAINING_STATUS_LABELS = {
+    0: "Unknown",
+    1: "Not Active",
+    2: "Detraining",
+    3: "Recovery",
+    4: "Maintaining",
+    5: "Peaking",
+    6: "Productive",
+    7: "Unproductive",
+    8: "Strained",
+    9: "Overreaching",
+}
+
+# Training readiness level → short display label
+READINESS_LEVEL_LABELS = {
+    "LOW": "Low",
+    "MODERATE": "Moderate",
+    "HIGH": "High",
+    "VERY_HIGH": "Very High",
+}
+
 
 def _prompt_mfa() -> str:
     """Callback for Garmin 2FA — prompts the user interactively."""
@@ -43,7 +65,7 @@ def get_garmin_client(email: str, password: str) -> Garmin:
         try:
             client = Garmin()
             client.login(str(SESSION_DIR))
-            print("✓ Loaded Garmin session from cache.")
+            print("Loaded Garmin session from cache.")
             return client
         except Exception:
             print("Cached session expired or invalid — re-authenticating...")
@@ -55,7 +77,7 @@ def get_garmin_client(email: str, password: str) -> Garmin:
     # Persist tokens so the next run skips this step
     SESSION_DIR.mkdir(exist_ok=True)
     client.garth.dump(str(SESSION_DIR))
-    print("✓ Session tokens saved to cache.")
+    print("Session tokens saved to cache.")
 
     return client
 
@@ -100,6 +122,10 @@ def fetch_health_data(client: Garmin, settings: dict | None = None) -> dict:
       - daily_stats: steps, calories, stress, body battery, resting HR per day
       - sleep: total/deep/REM/light sleep duration + sleep score per day
       - activities: recent activities (type, duration, distance, HR, calories)
+      - hrv: overnight HRV average and status per day
+      - training_readiness: daily readiness score (0-100) and level
+      - training_status: single rolling label (Productive / Unproductive / etc.)
+      - body_composition: weight, body fat %, muscle mass per day from scale
 
     The `settings` dict controls which categories are fetched and how many days
     of history are included. Each day's entry stores None for any metric the
@@ -111,6 +137,10 @@ def fetch_health_data(client: Garmin, settings: dict | None = None) -> dict:
     fetch_sleep = s.get("sleep_enabled", True)
     fetch_activities = s.get("activities_enabled", True)
     activity_count = int(s.get("activity_count", 10))
+    fetch_hrv = s.get("hrv_enabled", True)
+    fetch_readiness = s.get("training_readiness_enabled", True)
+    fetch_status = s.get("training_status_enabled", True)
+    fetch_body = s.get("body_enabled", True)
 
     today = date.today()
     date_range = [today - timedelta(days=i) for i in range(days_back)]
@@ -120,6 +150,10 @@ def fetch_health_data(client: Garmin, settings: dict | None = None) -> dict:
         "daily_stats": [],
         "sleep": [],
         "activities": [],
+        "hrv": [],
+        "training_readiness": [],
+        "training_status": None,
+        "body_composition": [],
     }
 
     for day in date_range:
@@ -165,6 +199,69 @@ def fetch_health_data(client: Garmin, settings: dict | None = None) -> dict:
 
             health_data["sleep"].append(sleep)
 
+        # --- HRV (overnight average + status) ---
+        if fetch_hrv:
+            try:
+                raw = client.get_hrv_data(date_str)
+                summary = _get(raw, "hrvSummary") or {}
+                hrv = {
+                    "date": date_str,
+                    "last_night_avg": _get(summary, "lastNightAvg"),
+                    "weekly_avg": _get(summary, "weeklyAvg"),
+                    "status": _get(summary, "status"),  # BALANCED / LOW / UNBALANCED
+                }
+            except Exception as e:
+                hrv = {"date": date_str, "error": str(e)}
+            health_data["hrv"].append(hrv)
+
+        # --- Training Readiness (daily score) ---
+        if fetch_readiness:
+            try:
+                raw = client.get_training_readiness(date_str)
+                reading = None
+                if isinstance(raw, list):
+                    # Prefer morning wakeup reading from primary device
+                    for r in raw:
+                        if r.get("primaryActivityTracker") and r.get("inputContext") == "AFTER_WAKEUP_RESET":
+                            reading = r
+                            break
+                    # Fallback: any primary device reading
+                    if reading is None:
+                        for r in raw:
+                            if r.get("primaryActivityTracker"):
+                                reading = r
+                                break
+                if reading:
+                    recovery_min = reading.get("recoveryTime")
+                    readiness = {
+                        "date": date_str,
+                        "score": reading.get("score"),
+                        "level": reading.get("level"),   # LOW / MODERATE / HIGH
+                        "recovery_time_h": round(recovery_min / 60, 1) if recovery_min else None,
+                    }
+                else:
+                    readiness = {"date": date_str, "score": None, "level": None, "recovery_time_h": None}
+            except Exception as e:
+                readiness = {"date": date_str, "error": str(e)}
+            health_data["training_readiness"].append(readiness)
+
+    # --- Training Status (fetch once — rolling label, not per-day) ---
+    if fetch_status:
+        try:
+            raw = client.get_training_status(today.isoformat())
+            ts_map = _get(raw, "mostRecentTrainingStatus", "latestTrainingStatusData") or {}
+            status_code = None
+            for device_data in ts_map.values():
+                status_code = _get(device_data, "trainingStatus")
+                break  # take the first (primary) device
+            health_data["training_status"] = {
+                "code": status_code,
+                "label": TRAINING_STATUS_LABELS.get(status_code, "Unknown"),
+                "date": today.isoformat(),
+            }
+        except Exception as e:
+            health_data["training_status"] = {"error": str(e)}
+
     # --- Recent activities (not day-by-day, just a flat list) ---
     if fetch_activities:
         try:
@@ -183,6 +280,28 @@ def fetch_health_data(client: Garmin, settings: dict | None = None) -> dict:
                 })
         except Exception as e:
             health_data["activities_error"] = str(e)
+
+    # --- Body composition (fetch entire range at once) ---
+    if fetch_body:
+        try:
+            start_str = (today - timedelta(days=days_back)).isoformat()
+            raw = client.get_body_composition(start_str, today.isoformat())
+            entries = raw.get("dateWeightList") or []
+            health_data["body_composition"] = [
+                {
+                    "date": e.get("calendarDate"),
+                    # Garmin stores weight in grams
+                    "weight_kg": round(e["weight"] / 1000, 1) if e.get("weight") else None,
+                    "bmi": round(e["bmi"], 1) if e.get("bmi") else None,
+                    "body_fat_pct": e.get("bodyFat"),
+                    "body_water_pct": e.get("bodyWater"),
+                    "muscle_mass_kg": round(e["muscleMass"] / 1000, 1) if e.get("muscleMass") else None,
+                    "bone_mass_kg": round(e["boneMass"] / 1000, 1) if e.get("boneMass") else None,
+                }
+                for e in entries
+            ]
+        except Exception as e:
+            health_data["body_composition_error"] = str(e)
 
     return health_data
 
@@ -208,15 +327,42 @@ def format_health_summary(health_data: dict, settings: dict | None = None) -> st
         "",
     ]
 
+    # ── Training Status (single rolling label) ────────────────────────────────
+    ts = health_data.get("training_status")
+    if ts and not ts.get("error") and ts.get("label") and s.get("training_status_enabled", True):
+        lines.append(f"TRAINING STATUS: {ts['label']} (as of {ts['date']})")
+        lines.append("")
+
     # ── Daily stats ───────────────────────────────────────────────────────────
-    if health_data.get("daily_stats"):
+    if health_data.get("daily_stats") or health_data.get("hrv") or health_data.get("training_readiness"):
         lines.append("DAILY STATS (most recent first):")
-        for day in health_data["daily_stats"]:
+
+        # Build lookup dicts for HRV and readiness keyed by date
+        hrv_by_date = {e["date"]: e for e in health_data.get("hrv", [])}
+        readiness_by_date = {e["date"]: e for e in health_data.get("training_readiness", [])}
+
+        # Use daily_stats as the primary loop driver; fall back to HRV dates
+        all_dates = []
+        seen = set()
+        for e in health_data.get("daily_stats", []):
+            if e["date"] not in seen:
+                all_dates.append(e["date"])
+                seen.add(e["date"])
+        # Ensure any HRV-only dates are included too
+        for e in health_data.get("hrv", []):
+            if e["date"] not in seen:
+                all_dates.append(e["date"])
+                seen.add(e["date"])
+
+        daily_by_date = {e["date"]: e for e in health_data.get("daily_stats", [])}
+
+        for date_str in all_dates:
+            day = daily_by_date.get(date_str, {"date": date_str})
             if "error" in day:
-                lines.append(f"  {day['date']}: [data unavailable]")
+                lines.append(f"  {date_str}: [data unavailable]")
                 continue
 
-            parts = [f"  {day['date']}:"]
+            parts = [f"  {date_str}:"]
             if s.get("metric_steps", True) and day.get("steps") is not None:
                 parts.append(f"{day['steps']:,} steps")
             if s.get("metric_calories_total", True) and day.get("calories_total") is not None:
@@ -224,13 +370,27 @@ def format_health_summary(health_data: dict, settings: dict | None = None) -> st
             if s.get("metric_calories_active", True) and day.get("calories_active") is not None:
                 parts.append(f"{day['calories_active']:,} active kcal")
             if s.get("metric_stress", True) and day.get("stress_avg") is not None:
-                parts.append(f"stress {day['stress_avg']}/100 avg")
+                parts.append(f"stress {day['stress_avg']}/100")
             if s.get("metric_body_battery", True) and day.get("body_battery") is not None:
                 parts.append(f"body battery {day['body_battery']}%")
             if s.get("metric_resting_hr", True) and day.get("resting_hr") is not None:
                 parts.append(f"RHR {day['resting_hr']} bpm")
             if s.get("metric_distance", True) and day.get("distance_m") is not None:
                 parts.append(f"{day['distance_m'] / 1000:.1f} km")
+
+            # HRV for this day
+            hrv = hrv_by_date.get(date_str, {})
+            if s.get("hrv_enabled", True) and hrv.get("last_night_avg") is not None:
+                status_str = f" ({hrv['status'].title()})" if hrv.get("status") else ""
+                parts.append(f"HRV {hrv['last_night_avg']} ms{status_str}")
+
+            # Training readiness for this day
+            rdy = readiness_by_date.get(date_str, {})
+            if s.get("training_readiness_enabled", True) and rdy.get("score") is not None:
+                level_str = READINESS_LEVEL_LABELS.get(rdy.get("level", ""), rdy.get("level", ""))
+                rec_str = f", {rdy['recovery_time_h']}h recovery" if rdy.get("recovery_time_h") else ""
+                parts.append(f"readiness {rdy['score']}/100 ({level_str}{rec_str})")
+
             lines.append(" | ".join(parts))
         lines.append("")
 
@@ -283,5 +443,24 @@ def format_health_summary(health_data: dict, settings: dict | None = None) -> st
             lines.append(
                 f"  [Error fetching activities: {health_data['activities_error']}]"
             )
+        lines.append("")
+
+    # ── Body Composition ──────────────────────────────────────────────────────
+    if health_data.get("body_composition") and s.get("body_enabled", True):
+        lines.append("BODY COMPOSITION (most recent first):")
+        for entry in health_data["body_composition"]:
+            parts = [f"  {entry['date']}:"]
+            if s.get("metric_body_weight", True) and entry.get("weight_kg") is not None:
+                parts.append(f"{entry['weight_kg']} kg")
+            if s.get("metric_body_fat", True) and entry.get("body_fat_pct") is not None:
+                parts.append(f"body fat {entry['body_fat_pct']}%")
+            if s.get("metric_body_muscle", True) and entry.get("muscle_mass_kg") is not None:
+                parts.append(f"muscle {entry['muscle_mass_kg']} kg")
+            if entry.get("bmi") is not None:
+                parts.append(f"BMI {entry['bmi']}")
+            lines.append(" | ".join(parts))
+        if "body_composition_error" in health_data:
+            lines.append(f"  [Error: {health_data['body_composition_error']}]")
+        lines.append("")
 
     return "\n".join(lines)

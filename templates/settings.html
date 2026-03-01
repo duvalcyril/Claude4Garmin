@@ -209,9 +209,101 @@
           </div>
         </div>
 
+        <!-- Recovery (HRV + Training Readiness) -->
+        <div class="form-section">
+          <div class="form-section-title">
+            <label class="category-label">
+              <input type="checkbox" name="hrv_enabled" class="category-check"
+                     id="hrv_enabled"
+                     {% if data_settings.hrv_enabled %}checked{% endif %}>
+              HRV (Heart Rate Variability)
+            </label>
+          </div>
+          <div class="metric-grid" data-parent="hrv_enabled">
+            <label class="metric-label" style="color: var(--muted); font-style: italic;">Overnight avg, weekly avg &amp; status — added to daily stats</label>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <div class="form-section-title">
+            <label class="category-label">
+              <input type="checkbox" name="training_readiness_enabled" class="category-check"
+                     id="training_readiness_enabled"
+                     {% if data_settings.training_readiness_enabled %}checked{% endif %}>
+              Training Readiness
+            </label>
+          </div>
+          <div class="metric-grid" data-parent="training_readiness_enabled">
+            <label class="metric-label" style="color: var(--muted); font-style: italic;">0–100 readiness score per day — added to daily stats</label>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <div class="form-section-title">
+            <label class="category-label">
+              <input type="checkbox" name="training_status_enabled" class="category-check"
+                     id="training_status_enabled"
+                     {% if data_settings.training_status_enabled %}checked{% endif %}>
+              Training Status
+            </label>
+          </div>
+          <div class="metric-grid" data-parent="training_status_enabled">
+            <label class="metric-label" style="color: var(--muted); font-style: italic;">Rolling label (Productive, Peaking, etc.) — shown in sidebar header</label>
+          </div>
+        </div>
+
+        <!-- Body Composition -->
+        <div class="form-section">
+          <div class="form-section-title">
+            <label class="category-label">
+              <input type="checkbox" name="body_enabled" class="category-check"
+                     id="body_enabled"
+                     {% if data_settings.body_enabled %}checked{% endif %}>
+              Body Composition
+            </label>
+          </div>
+          <div class="metric-grid" data-parent="body_enabled">
+            <label class="metric-label"><input type="checkbox" name="metric_body_weight" {% if data_settings.metric_body_weight %}checked{% endif %}> Weight</label>
+            <label class="metric-label"><input type="checkbox" name="metric_body_fat"    {% if data_settings.metric_body_fat    %}checked{% endif %}> Body Fat %</label>
+            <label class="metric-label"><input type="checkbox" name="metric_body_muscle" {% if data_settings.metric_body_muscle %}checked{% endif %}> Muscle Mass</label>
+          </div>
+        </div>
+
         <button type="submit" class="btn-primary">Save & Re-sync</button>
 
       </form>
+    </div>
+
+    <!-- ── Skills & Personas card ─────────────────────────────────────── -->
+    <div class="settings-card">
+
+      <h1 class="settings-title">Skills &amp; Personas</h1>
+      <p class="settings-subtitle">
+        Upload <strong>.json</strong> prompt skills or <strong>.skill</strong> coaching personas.
+        Skills appear instantly in the chat's <code>/</code> picker.
+      </p>
+
+      <div class="skill-upload-area" id="skill-upload-area">
+        <span class="skill-upload-label">Drop a file here or click to browse</span>
+        <input type="file" id="skill-file-input" class="skill-file-input" accept=".skill,.json" />
+      </div>
+      <div class="upload-status" id="upload-status"></div>
+
+      {% if skills %}
+      <div class="skill-list" style="margin-top: 20px;">
+        {% for skill in skills %}
+        <div class="skill-list-item {% if skill.type == 'persona' %}persona-skill{% endif %}">
+          <span class="skill-list-trigger">
+            {% if skill.type == "persona" %}⚡{% else %}/{% endif %}{{ skill.trigger }}
+          </span>
+          <span class="skill-list-desc">{{ skill.description }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p style="font-size:13px; color: var(--muted); margin-top: 16px;">No skills installed yet.</p>
+      {% endif %}
+
     </div>
 
   </div>
@@ -230,6 +322,52 @@
       }
       update();
       toggle.addEventListener("change", update);
+    });
+
+    // Skill / persona file upload
+    var uploadArea  = document.getElementById("skill-upload-area");
+    var fileInput   = document.getElementById("skill-file-input");
+    var statusEl    = document.getElementById("upload-status");
+
+    function setStatus(msg, ok) {
+      statusEl.textContent = msg;
+      statusEl.className = "upload-status " + (ok ? "ok" : "err");
+    }
+
+    async function uploadFile(file) {
+      setStatus("Uploading " + file.name + "…", true);
+      var fd = new FormData();
+      fd.append("file", file);
+      try {
+        var res = await fetch("/api/upload-skill", { method: "POST", body: fd });
+        var data = await res.json();
+        if (res.ok) {
+          setStatus("✓ " + file.name + " installed — reloading…", true);
+          setTimeout(function() { window.location.reload(); }, 800);
+        } else {
+          setStatus("✗ " + (data.detail || "Upload failed."), false);
+        }
+      } catch (e) {
+        setStatus("✗ Network error: " + e.message, false);
+      }
+    }
+
+    fileInput.addEventListener("change", function() {
+      if (fileInput.files[0]) uploadFile(fileInput.files[0]);
+    });
+
+    uploadArea.addEventListener("dragover", function(e) {
+      e.preventDefault();
+      uploadArea.classList.add("drag-over");
+    });
+    uploadArea.addEventListener("dragleave", function() {
+      uploadArea.classList.remove("drag-over");
+    });
+    uploadArea.addEventListener("drop", function(e) {
+      e.preventDefault();
+      uploadArea.classList.remove("drag-over");
+      var file = e.dataTransfer.files[0];
+      if (file) uploadFile(file);
     });
   </script>
 
