@@ -38,6 +38,20 @@ TRAINING_STATUS_LABELS = {
     9: "Overreaching",
 }
 
+# Training status string key → human label (Garmin API returns strings, not ints)
+TRAINING_STATUS_STR_LABELS = {
+    "UNKNOWN":       "Unknown",
+    "NOT_ACTIVE":    "Not Active",
+    "DETRAINING":    "Detraining",
+    "RECOVERY":      "Recovery",
+    "MAINTAINING":   "Maintaining",
+    "PEAKING":       "Peaking",
+    "PRODUCTIVE":    "Productive",
+    "UNPRODUCTIVE":  "Unproductive",
+    "STRAINED":      "Strained",
+    "OVERREACHING":  "Overreaching",
+}
+
 # Training readiness level → short display label
 READINESS_LEVEL_LABELS = {
     "LOW": "Low",
@@ -192,7 +206,12 @@ def fetch_health_data(client: Garmin, settings: dict | None = None) -> dict:
                     "light_seconds": _get(dto, "lightSleepSeconds"),
                     "rem_seconds": _get(dto, "remSleepSeconds"),
                     "awake_seconds": _get(dto, "awakeSleepSeconds"),
-                    "score": _get(dto, "sleepScoreValue"),
+                    # Newer API: nested under sleepScores.overall.value
+                    # Older API: sleepScoreValue at top level of dto
+                    "score": (
+                        _get(dto, "sleepScores", "overall", "value")
+                        or _get(dto, "sleepScoreValue")
+                    ),
                 }
             except Exception as e:
                 sleep = {"date": date_str, "error": str(e)}
@@ -250,13 +269,38 @@ def fetch_health_data(client: Garmin, settings: dict | None = None) -> dict:
         try:
             raw = client.get_training_status(today.isoformat())
             ts_map = _get(raw, "mostRecentTrainingStatus", "latestTrainingStatusData") or {}
-            status_code = None
+
+            status_val = None
+            feedback_phrase = None
             for device_data in ts_map.values():
-                status_code = _get(device_data, "trainingStatus")
-                break  # take the first (primary) device
+                status_val = _get(device_data, "trainingStatus")
+                feedback_phrase = _get(device_data, "trainingStatusFeedbackPhrase")
+                if status_val is not None:
+                    break  # take the primary device
+
+            # Prefer trainingStatusFeedbackPhrase — it's the human-readable source of truth.
+            # e.g. "PRODUCTIVE_3" → status_key "PRODUCTIVE" → label "Productive"
+            # The trailing _N is a sub-level indicator, not part of the category name.
+            if feedback_phrase:
+                parts = feedback_phrase.rsplit("_", 1)
+                status_key = parts[0] if (len(parts) == 2 and parts[1].isdigit()) else feedback_phrase
+                label = TRAINING_STATUS_STR_LABELS.get(
+                    status_key.upper(),
+                    status_key.replace("_", " ").title(),
+                )
+            elif isinstance(status_val, int):
+                label = TRAINING_STATUS_LABELS.get(status_val, "Unknown")
+            elif isinstance(status_val, str):
+                label = TRAINING_STATUS_STR_LABELS.get(
+                    status_val.upper(),
+                    status_val.replace("_", " ").title(),
+                )
+            else:
+                label = "Unknown"
+
             health_data["training_status"] = {
-                "code": status_code,
-                "label": TRAINING_STATUS_LABELS.get(status_code, "Unknown"),
+                "code": status_val,
+                "label": label,
                 "date": today.isoformat(),
             }
         except Exception as e:
