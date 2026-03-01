@@ -24,3 +24,7 @@ digest.log
 
 # Claude Code internal files
 .claude/
+
+/build
+/dist
+*.zip
