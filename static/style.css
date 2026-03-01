@@ -788,6 +788,12 @@ html, body {
 .ready-cell.ready-moderate  { color: #1d4ed8; font-weight: 600; }
 .ready-cell.ready-low       { color: #b91c1c; font-weight: 600; }
 
+/* Sleep quality coloring in table cells */
+.sleep-cell { font-variant-numeric: tabular-nums; }
+.sleep-cell.sleep-good { color: #065f46; font-weight: 600; }
+.sleep-cell.sleep-fair { color: #b45309; font-weight: 600; }
+.sleep-cell.sleep-poor { color: #b91c1c; font-weight: 600; }
+
 /* ── Activity tab: compact rows ──────────────────────────────────── */
 .act-row {
   padding: 7px 12px 8px;

@@ -137,10 +137,10 @@
               {% if 'error' not in entry and entry.total_seconds %}
               <tr>
                 <td class="col-date">{{ entry.date | fmt_date_short }}</td>
-                <td>{{ entry.total_seconds | hm }}</td>
+                <td class="sleep-cell {% if entry.total_seconds >= 25200 %}sleep-good{% elif entry.total_seconds >= 21600 %}sleep-fair{% else %}sleep-poor{% endif %}">{{ entry.total_seconds | hm }}</td>
                 <td>{{ entry.deep_seconds | hm if entry.deep_seconds else "—" }}</td>
                 <td>{{ entry.rem_seconds  | hm if entry.rem_seconds  else "—" }}</td>
-                <td>{{ entry.score if entry.score is not none else "—" }}</td>
+                <td class="sleep-cell {% if entry.score is not none %}{% if entry.score >= 80 %}sleep-good{% elif entry.score >= 60 %}sleep-fair{% else %}sleep-poor{% endif %}{% endif %}">{{ entry.score if entry.score is not none else "—" }}</td>
               </tr>
               {% endif %}
               {% endfor %}
