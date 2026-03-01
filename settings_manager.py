@@ -36,7 +36,9 @@ Settings structure (all keys with defaults):
 import json
 from pathlib import Path
 
-SETTINGS_FILE = Path("settings.json")
+from paths import user_data_dir
+
+SETTINGS_FILE = user_data_dir() / "settings.json"
 
 DEFAULTS: dict = {
     "days_back": 7,

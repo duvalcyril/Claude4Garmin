@@ -19,6 +19,7 @@ Run with:
 import asyncio
 import json
 import os
+import socket
 import subprocess
 import sys
 import threading
@@ -40,6 +41,24 @@ import settings_manager as sm
 import skills_manager as skm
 from garmin_client import get_garmin_client, fetch_health_data, format_health_summary
 from claude_client import ClaudeCoach
+from paths import bundle_dir, user_data_dir
+
+
+# ---------------------------------------------------------------------------
+# Port selection — try 8000 first, fall back if it's already in use
+# ---------------------------------------------------------------------------
+
+def find_free_port(start: int = 8000, end: int = 8010) -> int:
+    """Return the first available TCP port in [start, end)."""
+    for port in range(start, end):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            if s.connect_ex(("127.0.0.1", port)) != 0:
+                return port
+    raise RuntimeError(f"No free port found between {start} and {end - 1}.")
+
+
+# Resolved once at import time so launcher.py can read server.APP_PORT
+APP_PORT: int = find_free_port()
 
 
 # ---------------------------------------------------------------------------
@@ -100,7 +119,7 @@ async def _connect() -> None:
         health_summary = format_health_summary(raw, settings)
         coach = ClaudeCoach(
             health_summary=health_summary,
-            history_file=Path("chat_history.json"),
+            history_file=user_data_dir() / "chat_history.json",
         )
         garmin_connected = True
         connection_error = None
@@ -119,15 +138,22 @@ async def _connect() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await _connect()
-    # Open the browser half a second after startup (gives uvicorn time to bind)
-    target = "http://localhost:8000" if garmin_connected else "http://localhost:8000/settings"
-    threading.Timer(0.5, lambda: webbrowser.open(target)).start()
+    # Open the browser half a second after startup (gives uvicorn time to bind).
+    # When launched via launcher.py the browser open is handled there instead,
+    # so this only fires when running server.py directly (dev mode).
+    if not getattr(sys, "frozen", False) and "launcher" not in sys.modules:
+        target = (
+            f"http://localhost:{APP_PORT}"
+            if garmin_connected
+            else f"http://localhost:{APP_PORT}/settings"
+        )
+        threading.Timer(0.5, lambda: webbrowser.open(target)).start()
     yield
 
 
 app = FastAPI(lifespan=lifespan, title="Garmin Health Coach")
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
+app.mount("/static", StaticFiles(directory=str(bundle_dir() / "static")), name="static")
+templates = Jinja2Templates(directory=str(bundle_dir() / "templates"))
 
 
 # ── Jinja2 template filters ───────────────────────────────────────────────────
@@ -198,7 +224,7 @@ templates.env.filters["dur"]           = _dur
 # ---------------------------------------------------------------------------
 
 DIGEST_TASK_NAME = "GarminHealthCoachDigest"
-_DIGEST_SCRIPT   = Path(__file__).parent / "digest.py"
+_DIGEST_SCRIPT   = bundle_dir() / "digest.py"
 
 
 def _register_digest_task(send_time: str) -> None:
@@ -259,6 +285,12 @@ async def settings_page(request: Request, error: str = "", success: str = ""):
 # ---------------------------------------------------------------------------
 # API endpoints
 # ---------------------------------------------------------------------------
+
+@app.get("/health")
+async def health():
+    """Readiness probe — used by launcher.py to know when the server is up."""
+    return JSONResponse({"status": "ok"})
+
 
 @app.get("/api/status")
 async def api_status():
@@ -495,4 +527,4 @@ async def api_digest_test():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="warning")
+    uvicorn.run(app, host="127.0.0.1", port=APP_PORT, log_level="warning")

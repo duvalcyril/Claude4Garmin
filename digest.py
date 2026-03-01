@@ -29,10 +29,11 @@ import credentials_manager as cm
 import settings_manager as sm
 from garmin_client import get_garmin_client, fetch_health_data, format_health_summary
 from claude_client import ClaudeCoach
+from paths import bundle_dir, user_data_dir
 
-# Log to a file next to this script so Task Scheduler runs are auditable
+# Log to the user data directory so it's writable in both dev and packaged modes
 logging.basicConfig(
-    filename=PROJECT_DIR / "digest.log",
+    filename=user_data_dir() / "digest.log",
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(message)s",
 )
@@ -126,7 +127,7 @@ def build_template_vars(raw: dict, coach_text: str, target_date: date) -> dict:
 def render_email_html(template_vars: dict) -> str:
     """Render digest_email.html via Jinja2 (already installed as a FastAPI dep)."""
     from jinja2 import Environment, FileSystemLoader
-    env = Environment(loader=FileSystemLoader(str(PROJECT_DIR / "templates")))
+    env = Environment(loader=FileSystemLoader(str(bundle_dir() / "templates")))
     return env.get_template("digest_email.html").render(**template_vars)
 
 

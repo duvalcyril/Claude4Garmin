@@ -17,8 +17,10 @@ import json
 import zipfile
 from pathlib import Path
 
-SKILLS_DIR = Path("skills")
-CLAUDE_DIR  = Path(".claude")
+from paths import user_data_dir
+
+SKILLS_DIR = user_data_dir() / "skills"
+CLAUDE_DIR  = user_data_dir() / ".claude"
 
 
 def _parse_frontmatter(text: str) -> tuple[dict, str]:

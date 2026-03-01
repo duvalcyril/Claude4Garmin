@@ -19,7 +19,9 @@ import json
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-CACHE_FILE = Path("garmin_data.json")
+from paths import user_data_dir
+
+CACHE_FILE = user_data_dir() / "garmin_data.json"
 SCHEMA_VERSION = 1
 
 
