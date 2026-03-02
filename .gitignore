@@ -10,6 +10,7 @@ __pycache__/
 # Runtime data directory (settings, cache, chat history, logs, Garmin session)
 data/*.json
 data/*.log
+data/*.lock
 data/.garth_session/
 !data/.gitkeep
 
