@@ -29,41 +29,37 @@ from coach.paths import bundle_dir, user_data_dir
 LOCK_FILE = user_data_dir() / "app.lock"
 
 
-def _is_process_running(pid: int) -> bool:
-    """Return True if a process with the given PID is currently alive."""
+def _is_server_responding(port: int) -> bool:
+    """Return True if our server's /health endpoint answers on the given port."""
     try:
-        import os
-        import signal
-        if sys.platform == "win32":
-            import ctypes
-            handle = ctypes.windll.kernel32.OpenProcess(0x0400, False, pid)
-            if handle:
-                ctypes.windll.kernel32.CloseHandle(handle)
-                return True
-            return False
-        else:
-            os.kill(pid, 0)
-            return True
-    except (OSError, ProcessLookupError):
+        url = f"http://127.0.0.1:{port}/health"
+        with urllib.request.urlopen(url, timeout=2) as resp:
+            return resp.status == 200
+    except Exception:
         return False
 
 
-def _acquire_lock() -> bool:
+def _acquire_lock(port: int) -> bool:
     """
     Try to acquire the single-instance lock.
 
-    Returns True if we are the first instance, False if another is already running.
-    On success, writes our PID to the lock file.
+    Returns True if we are the first instance, False if another is confirmed running.
+    On success, writes our PID and port to the lock file as "PID:PORT".
+
+    PID alone is unreliable on Windows (PIDs are recycled), so we also verify
+    that the server is actually responding before declaring another instance live.
     """
     if LOCK_FILE.exists():
         try:
-            pid = int(LOCK_FILE.read_text().strip())
-            if _is_process_running(pid):
-                return False        # Another instance is alive
+            text = LOCK_FILE.read_text().strip()
+            pid_str, _, port_str = text.partition(":")
+            existing_port = int(port_str) if port_str else None
+            if existing_port and _is_server_responding(existing_port):
+                return False        # Confirmed: another instance is alive and serving
         except (ValueError, OSError):
             pass                    # Stale or corrupt lock file — overwrite it
 
-    LOCK_FILE.write_text(str(_get_pid()))
+    LOCK_FILE.write_text(f"{_get_pid()}:{port}")
     return True
 
 
@@ -164,10 +160,16 @@ def main() -> None:
     port = srv.APP_PORT
     app_url = f"http://127.0.0.1:{port}"
 
-    # Single-instance check
-    if not _acquire_lock():
-        # Another instance is running — just bring up the browser and exit
-        webbrowser.open(app_url)
+    # Single-instance check — pass port so it's stored in the lock file
+    if not _acquire_lock(port):
+        # Confirmed live instance: read its port from the lock file and open that URL
+        try:
+            text = LOCK_FILE.read_text().strip()
+            _, _, existing_port_str = text.partition(":")
+            live_url = f"http://127.0.0.1:{existing_port_str}"
+        except Exception:
+            live_url = app_url
+        webbrowser.open(live_url)
         sys.exit(0)
 
     # Start the FastAPI server in a daemon thread

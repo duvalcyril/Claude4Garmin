@@ -72,19 +72,33 @@ def build_template_vars(raw: dict, coach_text: str, target_date: date) -> dict:
     Extract display-ready values from the raw health_data dict.
 
     fetch_health_data() is called with days_back=2, so each list contains:
-      index 0 — today (partial data, probably empty for most metrics)
-      index 1 — yesterday (the data we want)
+      index 0 — today
+      index 1 — yesterday
     Fall back to index 0 if index 1 doesn't exist (edge case: first ever run).
+
+    Daytime metrics (steps, calories, etc.) use yesterday (index 1) because
+    today's accumulation is incomplete when the digest runs in the morning.
+
+    Overnight metrics (sleep, HRV, readiness) use today (index 0) because
+    Garmin records them under the wake-up date — e.g. Sunday-night sleep is
+    stored under Monday's date, not Sunday's.
     """
-    def _pick(lst: list) -> dict:
+    def _pick_yesterday(lst: list) -> dict:
+        """Yesterday's data (index 1) — for daytime metrics like steps/calories."""
         if not lst:
             return {}
         return lst[1] if len(lst) > 1 else lst[0]
 
-    stats = _pick(raw.get("daily_stats", []))
-    sleep = _pick(raw.get("sleep", []))
-    hrv   = _pick(raw.get("hrv", []))
-    rdy   = _pick(raw.get("training_readiness", []))
+    def _pick_today(lst: list) -> dict:
+        """Today's data (index 0) — for overnight metrics that end in the morning."""
+        if not lst:
+            return {}
+        return lst[0]
+
+    stats = _pick_yesterday(raw.get("daily_stats", []))
+    sleep = _pick_today(raw.get("sleep", []))
+    hrv   = _pick_today(raw.get("hrv", []))
+    rdy   = _pick_today(raw.get("training_readiness", []))
     ts    = raw.get("training_status") or {}
 
     return {
