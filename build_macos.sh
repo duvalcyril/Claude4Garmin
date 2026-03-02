@@ -12,6 +12,11 @@ pip install pyinstaller pystray pillow --quiet
 # Clean and build
 pyinstaller garmin_coach.spec --clean --noconfirm
 
+# Ad-hoc sign the app bundle so macOS shows "Open Anyway" rather than "damaged / can't be opened"
+echo ""
+echo " Ad-hoc signing dist/GarminHealthCoach.app ..."
+codesign --deep --force --sign - dist/GarminHealthCoach.app
+
 # Package the .app bundle into a .dmg for distribution
 echo ""
 echo " Packaging dist/GarminHealthCoach.app into GarminHealthCoach.dmg ..."

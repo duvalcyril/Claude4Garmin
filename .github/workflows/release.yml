@@ -62,6 +62,9 @@ jobs:
       - name: Build with PyInstaller
         run: pyinstaller garmin_coach.spec --clean --noconfirm
 
+      - name: Ad-hoc sign app bundle
+        run: codesign --deep --force --sign - dist/GarminHealthCoach.app
+
       - name: Package as .dmg
         run: |
           STAGING=$(mktemp -d)

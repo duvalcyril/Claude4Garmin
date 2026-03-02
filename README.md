@@ -291,7 +291,15 @@ If Garmin login fails despite correct credentials, the saved session token may h
 - **Running from source:** delete the `.garth_session` folder in the project directory
 
 ### App won't open (Mac security warning)
-macOS blocks apps from unidentified developers by default. Go to **System Settings → Privacy & Security**, scroll to the bottom, and click **Open Anyway** next to the Garmin Health Coach entry.
+macOS quarantines apps downloaded from the internet that aren't from the App Store. The fastest fix is to run this command in Terminal after moving the app to your Applications folder:
+
+```bash
+xattr -cr /Applications/GarminHealthCoach.app
+```
+
+This strips the quarantine flag and the app will open normally from then on. No need to re-run it after updates — just repeat the command for each new version you download.
+
+If you'd prefer not to use Terminal, the manual alternative is: **System Settings → Privacy & Security**, scroll to the bottom, and click **Open Anyway** next to the Garmin Health Coach entry.
 
 ### Digest email not arriving
 Click **Send Test** in Settings → Daily Digest to see the error. Common causes:
