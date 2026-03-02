@@ -280,15 +280,24 @@ def _unregister_digest_task() -> None:
 # Pages
 # ---------------------------------------------------------------------------
 
+def _profile_complete(settings: dict) -> bool:
+    """Profile is considered complete when at least sport and goal are filled in."""
+    p = settings.get("athlete_profile") or {}
+    return bool(p.get("sports") and p.get("goal"))
+
+
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     if not garmin_connected or not coach:
         return RedirectResponse("/settings")
+    settings = sm.load_settings()
     return templates.TemplateResponse("index.html", {
         "request": request,
         "health_summary": health_summary,
         "health_data": health_data,
         "nutrition_data": nutrition_data,
+        "athlete_profile": settings.get("athlete_profile") or {},
+        "profile_complete": _profile_complete(settings),
     })
 
 
@@ -322,6 +331,7 @@ async def settings_page(request: Request, error: str = "", success: str = ""):
         "has_digest_app_password": bool(cm.load_credential("digest_gmail_app_password")),
         "has_gemini_key":          bool(cm.load_credential("gemini_api_key")),
         "nutrition_status":        _nutrition_status(),
+        "athlete_profile":         sm.load_settings().get("athlete_profile") or {},
     })
 
 
@@ -443,6 +453,30 @@ async def api_upload_nutrition(file: UploadFile = File(...)):
         coach = _make_coach(health_summary, user_data_dir() / f"chat_history_{_provider}.json")
 
     return JSONResponse({"ok": True, "days_imported": len(new_totals), "total_days": len(merged_totals)})
+
+
+@app.post("/api/save-profile")
+async def api_save_profile(request: Request):
+    """Save the athlete profile and rebuild the coach context."""
+    global health_summary, coach
+    form = await request.form()
+    settings = sm.load_settings()
+    settings["athlete_profile"] = {
+        "name":            (form.get("name") or "").strip(),
+        "sports":          (form.get("sports") or "").strip(),
+        "level":           (form.get("level") or "").strip(),
+        "goal":            (form.get("goal") or "").strip(),
+        "training_days":   (form.get("training_days") or "").strip(),
+        "training_plan":   (form.get("training_plan") or "").strip(),
+        "upcoming_events": (form.get("upcoming_events") or "").strip(),
+        "health_notes":    (form.get("health_notes") or "").strip(),
+    }
+    sm.save_settings(settings)
+    if health_data:
+        health_summary = format_health_summary(health_data, settings, nutrition_data, nutrition_log)
+        _provider = settings.get("ai_provider", "claude")
+        coach = _make_coach(health_summary, user_data_dir() / f"chat_history_{_provider}.json")
+    return RedirectResponse("/settings?success=profile_saved#profile", status_code=303)
 
 
 @app.post("/api/nutrition-settings")

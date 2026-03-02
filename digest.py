@@ -13,6 +13,7 @@ Usage:
 """
 
 import argparse
+import json as _json
 import logging
 import smtplib
 import sys
@@ -42,9 +43,19 @@ log = logging.getLogger(__name__)
 
 
 DIGEST_PROMPT = (
-    "Based on my health data from yesterday, write a single encouraging paragraph "
-    "(3-5 sentences) summarising how I did and what I should focus on today. "
-    "Be specific about the numbers. Keep it motivating but honest."
+    "Based on my health data from yesterday, respond with ONLY a JSON object — no markdown, no extra text. "
+    "The JSON must have exactly three string fields:\n\n"
+    '  "recommendation": a 3–5 sentence personalised coaching paragraph. '
+    "Reference specific numbers from my data (HRV, readiness, sleep, steps, etc.). "
+    "Explain what they mean in context — not just what the numbers are, but what they imply for how I should "
+    "train or recover today. Call out anything that stands out as notably good or worth watching. "
+    "End with one concrete, actionable suggestion for today. Be direct and specific — avoid generic wellness clichés.\n\n"
+    '  "quote": a short motivational quote (one or two sentences) relevant to sport, resilience, health, or '
+    "performance. Choose something that fits my current situation — e.g. recovery or patience-themed if "
+    "readiness is low or I'm strained; ambition or execution-themed if I'm in a productive or peaking phase. "
+    "Vary the source: athletes, coaches, philosophers, writers — not always the same names.\n\n"
+    '  "quote_author": the person the quote is attributed to (name only, no dates or titles).\n\n'
+    'Example format: {"recommendation": "...", "quote": "...", "quote_author": "..."}'
 )
 
 
@@ -68,7 +79,7 @@ def _val(v, suffix: str = "") -> str:
 # Template variable builder
 # ---------------------------------------------------------------------------
 
-def build_template_vars(raw: dict, coach_text: str, target_date: date) -> dict:
+def build_template_vars(raw: dict, coach_text: str, target_date: date, quote: str = "", quote_author: str = "") -> dict:
     """
     Extract display-ready values from the raw health_data dict.
 
@@ -132,6 +143,8 @@ def build_template_vars(raw: dict, coach_text: str, target_date: date) -> dict:
         "sleep_rem":           _hm(sleep.get("rem_seconds")),
         "sleep_score":         _val(sleep.get("score")),
         "coach_recommendation": coach_text,
+        "quote":                quote,
+        "quote_author":         quote_author,
     }
 
 
@@ -210,8 +223,20 @@ def run_digest(target_date: date | None = None) -> None:
     raw     = fetch_health_data(garmin, digest_settings)
     summary = format_health_summary(raw, digest_settings, load_nutrition())
 
-    recommendation = ClaudeCoach(health_summary=summary).chat(DIGEST_PROMPT)
-    template_vars  = build_template_vars(raw, recommendation, target_date)
+    raw_response = ClaudeCoach(health_summary=summary).chat(DIGEST_PROMPT)
+
+    # Parse structured JSON response; fall back gracefully if Claude doesn't comply
+    try:
+        parsed         = _json.loads(raw_response)
+        recommendation = parsed.get("recommendation", raw_response)
+        quote          = parsed.get("quote", "")
+        quote_author   = parsed.get("quote_author", "")
+    except (_json.JSONDecodeError, AttributeError):
+        recommendation = raw_response
+        quote          = ""
+        quote_author   = ""
+
+    template_vars  = build_template_vars(raw, recommendation, target_date, quote, quote_author)
     html_body      = render_email_html(template_vars)
 
     subject = f"Your Health Digest \u2014 {target_date.strftime('%b %#d')}"

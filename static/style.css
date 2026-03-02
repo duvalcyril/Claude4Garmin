@@ -561,19 +561,29 @@ html, body {
   border-bottom: 1px solid var(--border);
 }
 
-.form-group       { display: flex; flex-direction: column; gap: 5px; }
+.form-group       { display: flex; flex-direction: column; gap: 6px; }
 .form-group label { font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 8px; }
-.form-group input {
-  padding: 9px 12px;
+.form-group label .hint { font-size: 12px; font-weight: 400; color: var(--muted); }
+.form-group input,
+.form-group select,
+.form-group textarea {
+  padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: 7px;
   font-size: 14px;
   font-family: inherit;
+  line-height: 1.5;
   outline: none;
   color: var(--text);
+  background: var(--surface);
   transition: border-color .15s;
+  width: 100%;
 }
-.form-group input:focus { border-color: var(--accent); }
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus  { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,.08); }
+.form-group textarea        { resize: vertical; min-height: 80px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+.form-group select          { cursor: pointer; appearance: auto; }
 
 .field-status { font-size: 11px; font-weight: 400; }
 .field-set     { color: var(--success-text); }

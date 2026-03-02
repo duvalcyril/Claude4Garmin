@@ -253,6 +253,14 @@
     <!-- Chat panel -->
     <main class="chat-panel">
 
+      {% if not profile_complete %}
+      <!-- Profile nudge banner -->
+      <div style="background:#fffbeb; border-bottom:1px solid #fde68a; padding:10px 20px; display:flex; align-items:center; gap:12px; font-size:13px; color:#92400e;">
+        <span>Your athlete profile is empty — Claude doesn't know your goals or training background yet.</span>
+        <a href="/settings#profile" style="white-space:nowrap; font-weight:600; color:#b45309; text-decoration:underline;">Set up your profile →</a>
+      </div>
+      {% endif %}
+
       <!-- Message list -->
       <div class="messages" id="messages">
         <div class="message coach">
@@ -262,13 +270,14 @@
             {% set _sleep = health_data.sleep[0]       if health_data.sleep       else {} %}
             {% set _ready = health_data.training_readiness[0] if health_data.training_readiness else {} %}
             {% set _ts    = health_data.training_status %}
-            <p>Hello! I've loaded your latest Garmin data.{% if _ts and _ts.label %} Your current training status is <strong>{{ _ts.label }}</strong>.{% endif %}
+            <p>Hello{% if athlete_profile.name %}, {{ athlete_profile.name }}{% endif %}! I've loaded your latest Garmin data.{% if _ts and _ts.label %} Your current training status is <strong>{{ _ts.label }}</strong>.{% endif %}
             {% if _sleep.score is not none %} Last night's sleep score was <strong>{{ _sleep.score }}/100</strong>{% if _sleep.total_seconds %} ({{ _sleep.total_seconds | hm }}){% endif %}.{% endif %}
             {% if _ready.score is not none %} Training readiness: <strong>{{ _ready.score }}/100</strong>.{% elif _stats.body_battery is not none %} Body battery: <strong>{{ _stats.body_battery }}%</strong>.{% endif %}
             {% if _stats.steps is not none %} Steps so far today: <strong>{{ _stats.steps | compact }}</strong>.{% endif %}</p>
+            {% if athlete_profile.goal %}<p>I know you're working towards: <em>{{ athlete_profile.goal }}</em>. I'll keep that in mind as we talk.</p>{% endif %}
             <p>Ask me anything about your activity, sleep, stress, or recovery — I'll give you specific, actionable insights.</p>
             {% else %}
-            <p>Hello! I've reviewed your Garmin data for the past 7 days. Ask me anything about your activity, sleep, stress, or recovery — I'll give you specific, actionable insights.</p>
+            <p>Hello{% if athlete_profile.name %}, {{ athlete_profile.name }}{% endif %}! I've reviewed your Garmin data for the past 7 days.{% if athlete_profile.goal %} I know you're working towards: <em>{{ athlete_profile.goal }}</em>.{% endif %} Ask me anything about your activity, sleep, stress, or recovery — I'll give you specific, actionable insights.</p>
             {% endif %}
           </div>
         </div>

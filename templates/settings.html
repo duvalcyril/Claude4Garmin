@@ -28,6 +28,7 @@
     <nav class="settings-nav">
       <div class="settings-nav-label">Settings</div>
       <button class="settings-nav-item" data-panel="connection">Connection</button>
+      <button class="settings-nav-item" data-panel="profile">Profile</button>
       <button class="settings-nav-item" data-panel="data">Data</button>
       <button class="settings-nav-item" data-panel="nutrition">Nutrition</button>
       <button class="settings-nav-item" data-panel="personas">Personas</button>
@@ -164,6 +165,115 @@
         </form>
 
       </div><!-- /panel-connection -->
+
+      <!-- ── Profile panel ───────────────────────────────────────────── -->
+      <div id="panel-profile" class="settings-panel">
+
+        <div class="settings-panel-header">
+          <h1 class="settings-panel-title">Athlete Profile</h1>
+          <p class="settings-panel-desc">Tell your coach who you are. This context is injected into every conversation and your daily digest — Claude will reference your goals, training background, and any health notes in every response.</p>
+        </div>
+
+        {% if success == "profile_saved" %}
+          <div class="banner banner-success">✓ Profile saved. Claude will use this context from your next message.</div>
+        {% endif %}
+
+        <form method="POST" action="/api/save-profile">
+          <div class="settings-2col" style="max-width:760px;">
+
+            <!-- Left column -->
+            <div class="settings-stack">
+
+              <div class="settings-card">
+                <div class="form-section-title">Your sport &amp; level</div>
+                <div class="settings-stack" style="margin-top:16px;">
+
+                  <div class="form-group">
+                    <label for="p_name">Your name</label>
+                    <input type="text" id="p_name" name="name"
+                           value="{{ athlete_profile.name or '' }}"
+                           placeholder="e.g. Alex" />
+                  </div>
+
+                  <div class="form-group">
+                    <label for="p_sports">Sport(s)</label>
+                    <input type="text" id="p_sports" name="sports"
+                           value="{{ athlete_profile.sports or '' }}"
+                           placeholder="e.g. Running, Cycling, Triathlon" />
+                  </div>
+
+                  <div class="form-group">
+                    <label for="p_level">Level</label>
+                    <select id="p_level" name="level">
+                      <option value="">— select —</option>
+                      {% for opt in ["Recreational", "Competitive amateur", "Serious competitive", "Professional"] %}
+                      <option value="{{ opt }}" {% if athlete_profile.level == opt %}selected{% endif %}>{{ opt }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="p_days">Training days per week</label>
+                    <select id="p_days" name="training_days">
+                      <option value="">— select —</option>
+                      {% for d in range(1, 8) %}
+                      <option value="{{ d }}" {% if athlete_profile.training_days == d|string %}selected{% endif %}>{{ d }} day{{ 's' if d > 1 else '' }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="p_plan">Training plan <span class="hint">(optional)</span></label>
+                    <input type="text" id="p_plan" name="training_plan"
+                           value="{{ athlete_profile.training_plan or '' }}"
+                           placeholder="e.g. Pfitzinger 18/55, self-coached, coach-led" />
+                  </div>
+
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Right column -->
+            <div class="settings-stack">
+
+              <div class="settings-card">
+                <div class="form-section-title">Goals &amp; context</div>
+                <div class="settings-stack" style="margin-top:16px;">
+
+                  <div class="form-group">
+                    <label for="p_goal">Current goal</label>
+                    <textarea id="p_goal" name="goal" rows="3"
+                              placeholder="e.g. Sub-3:30 marathon at Paris in April. Also want to lose 3–4 kg while keeping performance up.">{{ athlete_profile.goal or '' }}</textarea>
+                  </div>
+
+                  <div class="form-group">
+                    <label for="p_events">Upcoming events <span class="hint">(optional)</span></label>
+                    <input type="text" id="p_events" name="upcoming_events"
+                           value="{{ athlete_profile.upcoming_events or '' }}"
+                           placeholder="e.g. Paris Marathon April 6, local 10k in March" />
+                  </div>
+
+                  <div class="form-group">
+                    <label for="p_notes">Health notes <span class="hint">(optional)</span></label>
+                    <textarea id="p_notes" name="health_notes" rows="3"
+                              placeholder="Injuries, limitations, or anything your coach should know — e.g. left IT band sensitivity, avoiding high-impact on Tuesdays, history of lower back issues.">{{ athlete_profile.health_notes or '' }}</textarea>
+                  </div>
+
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+
+          <div style="margin-top:20px; max-width:760px;">
+            <button type="submit" class="btn-primary" style="padding:11px 28px;">Save profile</button>
+          </div>
+
+        </form>
+
+      </div><!-- /panel-profile -->
 
       <!-- ── Data panel ─────────────────────────────────────────────── -->
       <div id="panel-data" class="settings-panel">
@@ -615,11 +725,12 @@
     else if (success === "digest_saved")         initialPanel = "digest";
     else if (success === "nutrition_uploaded")   initialPanel = "nutrition";
     else if (success === "nutrition_settings_saved") initialPanel = "nutrition";
-    else if (success === "ai_saved")          initialPanel = "connection";
+    else if (success === "ai_saved")             initialPanel = "connection";
+    else if (success === "profile_saved")        initialPanel = "profile";
     else if (error && error !== "passwords_mismatch" && error !== "missing_fields") initialPanel = "digest";
     else {
       var hash = window.location.hash.slice(1);
-      if (["connection", "data", "nutrition", "personas", "digest"].indexOf(hash) !== -1) initialPanel = hash;
+      if (["connection", "profile", "data", "nutrition", "personas", "digest"].indexOf(hash) !== -1) initialPanel = hash;
     }
     showPanel(initialPanel);
 

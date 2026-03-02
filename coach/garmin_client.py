@@ -385,7 +385,35 @@ def format_health_summary(health_data: dict, settings: dict | None = None, nutri
     """
     s = settings or {}
 
-    lines = [
+    lines = []
+
+    # ── Athlete Profile ───────────────────────────────────────────────────────
+    profile = s.get("athlete_profile") or {}
+    if any(profile.get(k) for k in ("name", "sports", "goal", "level", "training_days",
+                                     "training_plan", "upcoming_events", "health_notes")):
+        lines.append("=== ATHLETE PROFILE ===")
+        if profile.get("name"):
+            lines.append(f"Name: {profile['name']} (always address them by this name)")
+        if profile.get("sports"):
+            lines.append(f"Sport(s): {profile['sports']}")
+        if profile.get("level"):
+            lines.append(f"Level: {profile['level']}")
+        if profile.get("goal"):
+            lines.append(f"Current goal: {profile['goal']}")
+        if profile.get("training_days"):
+            day_part = f"{profile['training_days']} days/week"
+            if profile.get("training_plan"):
+                day_part += f" | Plan: {profile['training_plan']}"
+            lines.append(f"Training: {day_part}")
+        elif profile.get("training_plan"):
+            lines.append(f"Plan: {profile['training_plan']}")
+        if profile.get("upcoming_events"):
+            lines.append(f"Upcoming events: {profile['upcoming_events']}")
+        if profile.get("health_notes"):
+            lines.append(f"Health notes: {profile['health_notes']}")
+        lines.append("")
+
+    lines += [
         f"=== GARMIN HEALTH SUMMARY (fetched {health_data['fetch_date']}) ===",
         "",
     ]
