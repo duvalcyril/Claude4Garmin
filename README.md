@@ -190,6 +190,20 @@ Go to **Settings** (gear icon or the Settings button) to configure the app.
 ### Connection
 Update your Garmin email, password, or Anthropic API key. You only need to do this if you change your password or want to use a different API key.
 
+### Profile
+Tell Claude who you are. This is the most impactful thing you can set up — it's injected into every conversation and your daily digest so Claude responds with your goals and context in mind, not just raw numbers.
+
+Fields you can fill in:
+- **Your name** — Claude will address you by name in every response and in the digest
+- **Sport(s)** — what you train for (e.g. Running, Cycling, Triathlon)
+- **Level** — Recreational / Competitive amateur / Serious competitive / Professional
+- **Current goal** — in your own words (e.g. "Sub-3:30 marathon at Paris in April, also trying to lose 3–4 kg")
+- **Training days per week** and **Training plan** (optional)
+- **Upcoming events** — races or goals with dates (optional)
+- **Health notes** — injuries, limitations, or anything your coach should know (optional)
+
+The profile is saved immediately and takes effect from your next message — no restart needed.
+
 ### Data Preferences
 Choose what data the app fetches and how far back it looks:
 
@@ -236,7 +250,8 @@ Get a morning email every day with yesterday's key stats and a Claude-generated 
 - Steps, calories, body battery, resting HR
 - HRV (overnight average + status), Training Readiness score, Training Status label
 - Sleep breakdown — total, deep, REM, score
-- A short Claude-written paragraph: how yesterday went and what to focus on today
+- A personalised coaching paragraph from Claude: references your specific numbers, explains what they mean for how you should train or recover today, and ends with one concrete actionable suggestion. If you've filled in your athlete profile, Claude will address you by name and factor in your goals and training context.
+- A daily motivational quote chosen to fit your current situation (recovery-themed if readiness is low, performance-themed if you're in a productive phase)
 
 **Setup** (in Settings → Daily Digest):
 1. Enter your recipient email address and preferred send time
