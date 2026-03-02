@@ -68,10 +68,11 @@
 
       <!-- Tab strip -->
       <div class="sidebar-tabs" role="tablist">
-        <button class="sidebar-tab active" data-tab="tab-stats"    role="tab">Stats</button>
-        <button class="sidebar-tab"         data-tab="tab-sleep"    role="tab">Sleep</button>
-        <button class="sidebar-tab"         data-tab="tab-activity" role="tab">Activity</button>
-        <button class="sidebar-tab"         data-tab="tab-body"     role="tab">Body</button>
+        <button class="sidebar-tab active" data-tab="tab-stats"     role="tab">Stats</button>
+        <button class="sidebar-tab"         data-tab="tab-sleep"     role="tab">Sleep</button>
+        <button class="sidebar-tab"         data-tab="tab-activity"  role="tab">Activity</button>
+        <button class="sidebar-tab"         data-tab="tab-body"      role="tab">Body</button>
+        {% if nutrition_data %}<button class="sidebar-tab" data-tab="tab-nutrition" role="tab">Nutrition</button>{% endif %}
       </div>
 
       <!-- Tab panels -->
@@ -195,6 +196,40 @@
           </table>
           {% else %}
           <p class="tab-empty">No body composition data.<br>Requires a Garmin-compatible smart scale.</p>
+          {% endif %}
+        </div>
+
+        <!-- ── Nutrition tab ─────────────────────────────────────── -->
+        <div id="tab-nutrition" class="tab-panel" role="tabpanel">
+          {% if nutrition_data %}
+          {% set nutrition_dates = nutrition_data.keys() | sort(reverse=true) | list %}
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th></th>
+                <th>kcal</th>
+                <th>Pro</th>
+                <th>Crb</th>
+                <th>Fat</th>
+                <th>Fbr</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for d in nutrition_dates %}
+              {% set n = nutrition_data[d] %}
+              <tr>
+                <td class="col-date">{{ d | fmt_date }}</td>
+                <td>{{ n.calories | int }}</td>
+                <td>{{ n.protein | int }}g</td>
+                <td>{{ n.carbs | int }}g</td>
+                <td>{{ n.fat | int }}g</td>
+                <td>{{ n.fiber | round(1) if n.fiber else "—" }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          {% else %}
+          <p class="tab-empty">No nutrition data.<br>Upload a MacroFactor CSV in <a href="/settings#nutrition" style="color:var(--accent);">Settings → Nutrition</a>.</p>
           {% endif %}
         </div>
 

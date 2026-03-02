@@ -373,7 +373,7 @@ def fetch_health_data(
 # Formatting
 # ---------------------------------------------------------------------------
 
-def format_health_summary(health_data: dict, settings: dict | None = None) -> str:
+def format_health_summary(health_data: dict, settings: dict | None = None, nutrition_data: dict | None = None, nutrition_log: dict | None = None) -> str:
     """
     Convert raw Garmin data into a clean, readable text block.
 
@@ -525,5 +525,46 @@ def format_health_summary(health_data: dict, settings: dict | None = None) -> st
         if "body_composition_error" in health_data:
             lines.append(f"  [Error: {health_data['body_composition_error']}]")
         lines.append("")
+
+    # ── Nutrition ─────────────────────────────────────────────────────────────
+    if (nutrition_data or nutrition_log) and s.get("nutrition_enabled", True):
+        days_back = int(s.get("days_back", DAYS_BACK))
+
+        # Daily macro totals — compact summary
+        if nutrition_data:
+            sorted_dates = sorted(nutrition_data.keys(), reverse=True)[:days_back]
+            if sorted_dates:
+                lines.append("NUTRITION — Daily Macros (most recent first):")
+                for d in sorted_dates:
+                    n = nutrition_data[d]
+                    parts = [f"  {d}:"]
+                    parts.append(f"{int(n['calories'])} kcal")
+                    parts.append(f"P {int(n['protein'])}g")
+                    parts.append(f"C {int(n['carbs'])}g")
+                    parts.append(f"F {int(n['fat'])}g")
+                    if n.get("fiber"):
+                        parts.append(f"fiber {n['fiber']}g")
+                    lines.append(" | ".join(parts))
+                lines.append("")
+
+        # Full food item log — detailed per-meal breakdown for Claude
+        if nutrition_log:
+            sorted_dates = sorted(nutrition_log.keys(), reverse=True)[:days_back]
+            if sorted_dates:
+                lines.append("NUTRITION — Full Food Log (most recent first):")
+                for d in sorted_dates:
+                    lines.append(f"  {d}:")
+                    for item in nutrition_log[d]:
+                        t = item.get("time") or "?"
+                        name = item.get("name", "Unknown")
+                        parts = [f"    {t}  {name}"]
+                        parts.append(f"{int(item.get('calories', 0))} kcal")
+                        parts.append(f"P {int(item.get('protein', 0))}g")
+                        parts.append(f"C {int(item.get('carbs', 0))}g")
+                        parts.append(f"F {int(item.get('fat', 0))}g")
+                        if item.get("fiber"):
+                            parts.append(f"fiber {item['fiber']}g")
+                        lines.append(" | ".join(parts))
+                lines.append("")
 
     return "\n".join(lines)

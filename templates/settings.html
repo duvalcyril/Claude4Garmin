@@ -29,6 +29,7 @@
       <div class="settings-nav-label">Settings</div>
       <button class="settings-nav-item" data-panel="connection">Connection</button>
       <button class="settings-nav-item" data-panel="data">Data</button>
+      <button class="settings-nav-item" data-panel="nutrition">Nutrition</button>
       <button class="settings-nav-item" data-panel="personas">Personas</button>
       <button class="settings-nav-item" data-panel="digest">Digest</button>
     </nav>
@@ -330,6 +331,44 @@
         </form>
       </div><!-- /panel-data -->
 
+      <!-- ── Nutrition panel ───────────────────────────────────────── -->
+      <div id="panel-nutrition" class="settings-panel">
+
+        <div class="settings-panel-header">
+          <h1 class="settings-panel-title">Nutrition</h1>
+          <p class="settings-panel-desc">Upload a MacroFactor CSV export to add daily macro context to your coach. New uploads are merged with existing data — no duplicates.</p>
+        </div>
+
+        {% if success == "nutrition_uploaded" %}
+          <div class="banner banner-success" style="margin-bottom:20px;">✓ Nutrition data imported successfully.</div>
+        {% endif %}
+
+        <!-- Status card -->
+        {% if nutrition_status %}
+        <div class="settings-card" style="max-width:520px; margin-bottom:20px;">
+          <div class="form-section-title">Loaded Data</div>
+          <p style="font-size:13px; color:var(--text); margin-top:10px;">
+            <strong>{{ nutrition_status.days }}</strong> days &mdash;
+            {{ nutrition_status.from }} to {{ nutrition_status.to }}
+          </p>
+        </div>
+        {% endif %}
+
+        <!-- Upload card -->
+        <div class="settings-card" style="max-width:520px;">
+          <div class="form-section-title">Import CSV</div>
+          <p style="font-size:12px; color:var(--muted); margin-top:4px;">
+            Export from MacroFactor → Profile → Export Data → CSV. Any date range works; data is merged automatically.
+          </p>
+          <div class="skill-upload-area" id="nutrition-upload-area" style="margin-top:12px;">
+            <span class="skill-upload-label">Drop a MacroFactor .csv file here, or click to browse</span>
+            <input type="file" id="nutrition-file-input" class="skill-file-input" accept=".csv" />
+          </div>
+          <div class="upload-status" id="nutrition-upload-status"></div>
+        </div>
+
+      </div><!-- /panel-nutrition -->
+
       <!-- ── Personas panel ─────────────────────────────────────────── -->
       <div id="panel-personas" class="settings-panel">
 
@@ -545,13 +584,14 @@
     var success = params.get("success");
     var error   = params.get("error");
     var initialPanel = "connection";
-    if (success === "data_saved")        initialPanel = "data";
-    else if (success === "digest_saved") initialPanel = "digest";
-    else if (success === "ai_saved")     initialPanel = "connection";
+    if (success === "data_saved")             initialPanel = "data";
+    else if (success === "digest_saved")      initialPanel = "digest";
+    else if (success === "nutrition_uploaded") initialPanel = "nutrition";
+    else if (success === "ai_saved")          initialPanel = "connection";
     else if (error && error !== "passwords_mismatch" && error !== "missing_fields") initialPanel = "digest";
     else {
       var hash = window.location.hash.slice(1);
-      if (["connection", "data", "personas", "digest"].indexOf(hash) !== -1) initialPanel = hash;
+      if (["connection", "data", "nutrition", "personas", "digest"].indexOf(hash) !== -1) initialPanel = hash;
     }
     showPanel(initialPanel);
 
@@ -749,6 +789,59 @@
         } finally {
           digestTestBtn.disabled = false;
         }
+      });
+    }
+
+    /* ── Nutrition CSV upload ─────────────────────────────────────── */
+    var nutritionUploadArea  = document.getElementById("nutrition-upload-area");
+    var nutritionFileInput   = document.getElementById("nutrition-file-input");
+    var nutritionStatusEl    = document.getElementById("nutrition-upload-status");
+
+    function setNutritionStatus(msg, ok) {
+      if (!nutritionStatusEl) return;
+      nutritionStatusEl.textContent = msg;
+      nutritionStatusEl.className = "upload-status " + (ok ? "ok" : "err");
+    }
+
+    async function uploadNutritionFile(file) {
+      setNutritionStatus("Importing " + file.name + "\u2026", true);
+      var fd = new FormData();
+      fd.append("file", file);
+      try {
+        var res  = await fetch("/api/upload-nutrition", { method: "POST", body: fd });
+        var data = await res.json();
+        if (res.ok && data.ok) {
+          setNutritionStatus(
+            "\u2713 " + data.days_imported + " days imported (" + data.total_days + " total) \u2014 reloading\u2026",
+            true
+          );
+          setTimeout(function() { window.location.reload(); }, 900);
+        } else {
+          setNutritionStatus("\u2717 " + (data.detail || data.error || "Import failed."), false);
+        }
+      } catch (e) {
+        setNutritionStatus("\u2717 Network error: " + e.message, false);
+      }
+    }
+
+    if (nutritionFileInput) {
+      nutritionFileInput.addEventListener("change", function() {
+        if (nutritionFileInput.files[0]) uploadNutritionFile(nutritionFileInput.files[0]);
+      });
+    }
+    if (nutritionUploadArea) {
+      nutritionUploadArea.addEventListener("dragover", function(e) {
+        e.preventDefault();
+        nutritionUploadArea.classList.add("drag-over");
+      });
+      nutritionUploadArea.addEventListener("dragleave", function() {
+        nutritionUploadArea.classList.remove("drag-over");
+      });
+      nutritionUploadArea.addEventListener("drop", function(e) {
+        e.preventDefault();
+        nutritionUploadArea.classList.remove("drag-over");
+        var file = e.dataTransfer.files[0];
+        if (file) uploadNutritionFile(file);
       });
     }
   </script>

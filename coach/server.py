@@ -37,6 +37,7 @@ from dotenv import load_dotenv
 
 from . import credentials_manager as cm
 from . import data_cache as dc
+from . import nutrition_parser as np_
 from . import settings_manager as sm
 from . import skills_manager as skm
 from .garmin_client import get_garmin_client, fetch_health_data, format_health_summary
@@ -68,6 +69,8 @@ APP_PORT: int = find_free_port()
 coach: ClaudeCoach | None = None
 health_summary: str | None = None
 health_data: dict | None = None
+nutrition_data: dict = {}
+nutrition_log: dict = {}
 garmin_connected: bool = False
 connection_error: str | None = None
 
@@ -107,7 +110,7 @@ async def _connect() -> None:
     Updates module-level state. Never raises — errors are stored in
     connection_error so the UI can display them gracefully.
     """
-    global coach, health_summary, health_data, garmin_connected, connection_error
+    global coach, health_summary, health_data, nutrition_data, nutrition_log, garmin_connected, connection_error
 
     # Keychain → env var fallback, then load .env for any remaining gaps
     cm.inject_into_env()
@@ -141,7 +144,9 @@ async def _connect() -> None:
         dc.save_cache(raw)
 
         health_data = raw
-        health_summary = format_health_summary(raw, settings)
+        nutrition_data = np_.load_nutrition()
+        nutrition_log = np_.load_nutrition_log()
+        health_summary = format_health_summary(raw, settings, nutrition_data, nutrition_log)
         _provider = settings.get("ai_provider", "claude")
         coach = _make_coach(health_summary, user_data_dir() / f"chat_history_{_provider}.json")
         garmin_connected = True
@@ -283,7 +288,17 @@ async def index(request: Request):
         "request": request,
         "health_summary": health_summary,
         "health_data": health_data,
+        "nutrition_data": nutrition_data,
     })
+
+
+def _nutrition_status() -> dict | None:
+    """Return display metadata about the stored nutrition data, or None if empty."""
+    data = np_.load_nutrition()
+    if not data:
+        return None
+    dates = sorted(data.keys())
+    return {"days": len(data), "from": dates[0], "to": dates[-1]}
 
 
 @app.get("/settings", response_class=HTMLResponse)
@@ -306,6 +321,7 @@ async def settings_page(request: Request, error: str = "", success: str = ""):
         "has_digest_sender":       bool(cm.load_credential("digest_gmail_sender")),
         "has_digest_app_password": bool(cm.load_credential("digest_gmail_app_password")),
         "has_gemini_key":          bool(cm.load_credential("gemini_api_key")),
+        "nutrition_status":        _nutrition_status(),
     })
 
 
@@ -395,6 +411,38 @@ async def api_upload_skill(file: UploadFile = File(...)):
 
     else:
         raise HTTPException(400, detail="Unsupported file type. Upload a .skill or .json file.")
+
+
+@app.post("/api/upload-nutrition")
+async def api_upload_nutrition(file: UploadFile = File(...)):
+    """Parse a MacroFactor CSV, merge with existing nutrition data, rebuild coach."""
+    global nutrition_data, nutrition_log, health_summary, coach
+    content = await file.read()
+    try:
+        new_totals, new_log = np_.parse_csv(content)
+    except Exception as exc:
+        raise HTTPException(400, detail=f"Could not parse CSV: {exc}")
+
+    # Merge and persist daily totals
+    existing_totals = np_.load_nutrition()
+    merged_totals   = np_.merge_nutrition(existing_totals, new_totals)
+    np_.save_nutrition(merged_totals)
+    nutrition_data = merged_totals
+
+    # Merge and persist full food log
+    existing_log = np_.load_nutrition_log()
+    merged_log   = np_.merge_nutrition_log(existing_log, new_log)
+    np_.save_nutrition_log(merged_log)
+    nutrition_log = merged_log
+
+    # Rebuild coach context with updated nutrition data
+    if health_data:
+        settings = sm.load_settings()
+        health_summary = format_health_summary(health_data, settings, nutrition_data, nutrition_log)
+        _provider = settings.get("ai_provider", "claude")
+        coach = _make_coach(health_summary, user_data_dir() / f"chat_history_{_provider}.json")
+
+    return JSONResponse({"ok": True, "days_imported": len(new_totals), "total_days": len(merged_totals)})
 
 
 @app.post("/api/create-persona")

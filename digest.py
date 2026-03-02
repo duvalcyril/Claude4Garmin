@@ -29,6 +29,7 @@ import coach.credentials_manager as cm
 import coach.settings_manager as sm
 from coach.garmin_client import get_garmin_client, fetch_health_data, format_health_summary
 from coach.claude_client import ClaudeCoach
+from coach.nutrition_parser import load_nutrition
 from coach.paths import bundle_dir, user_data_dir
 
 # Log to the user data directory so it's writable in both dev and packaged modes
@@ -207,7 +208,7 @@ def run_digest(target_date: date | None = None) -> None:
     # days_back=2: today (index 0) + yesterday (index 1)
     digest_settings = {**settings, "days_back": 2}
     raw     = fetch_health_data(garmin, digest_settings)
-    summary = format_health_summary(raw, digest_settings)
+    summary = format_health_summary(raw, digest_settings, load_nutrition())
 
     recommendation = ClaudeCoach(health_summary=summary).chat(DIGEST_PROMPT)
     template_vars  = build_template_vars(raw, recommendation, target_date)
