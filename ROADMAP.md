@@ -24,6 +24,8 @@ A collection of planned improvements, in no particular order.
 
 **Daily Digest** — Morning email with yesterday's stats, sleep, HRV, readiness, training status, and a Claude-generated coaching recommendation. Sent via Gmail SMTP (app password). Scheduled via Windows Task Scheduler from the Settings page. Configurable recipient and send time. Test-send button for instant verification. All email errors logged to `digest.log`.
 
+**MacroFactor nutrition integration** — MacroFactor daily-summary CSV import. Parses calories, macros, TDEE, trend weight, steps, and target macros. Displayed in a dedicated Nutrition sidebar tab. Independently toggleable in Claude's AI context (daily totals and/or full food log). Import via Settings → Nutrition.
+
 ---
 
 ## Expanded Garmin data (remaining)
@@ -54,22 +56,6 @@ Functional Threshold Power in watts. Relevant for ride intensity context if a po
 Average breaths per minute during sleep. Elevated respiration often correlates with illness, overtraining, or high stress before other metrics catch it.
 - Add alongside sleep metrics in the sidebar
 - Add a `metric_respiration` toggle to Data Preferences
-
----
-
-## MacroFactor food log integration
-
-Add nutrition context alongside activity and recovery data so Claude can give advice on the full picture (fueling, deficits, protein targets, etc.).
-
-MacroFactor doesn't have a public API, but offers a **CSV data export**. Approach:
-- Add a `macrofactor_client.py` that reads and parses the exported CSV
-- Pull in recent days of food log entries (calories, macros, food names)
-- Append a nutrition summary section to the data sent to Claude
-
-Things to figure out:
-- Export format (MacroFactor exports diary as CSV with date, meal, food, macros)
-- How often the user re-exports (manual step vs. watching a folder for new files)
-- Whether to store the file path in the credential manager or `settings.json`
 
 ---
 
@@ -117,6 +103,24 @@ Things to figure out:
 - Whether to support Garmin + Apple Watch simultaneously or as mutually exclusive sources
 - How to normalise divergent metric names (Apple's `HKQuantityTypeIdentifierHeartRateVariabilitySDNN` vs Garmin's `lastNight5MinHighRmssd`, etc.)
 - Sleep stage mapping (Apple Health stages vs Garmin stages)
+
+---
+
+## Custom workout creation and upload
+
+Generate personalised running and cycling workouts from Claude based on your current fitness level, training status, and goals — then push them directly to Garmin Connect so they appear on your device ready to follow.
+
+### What it would do
+- Ask Claude to create a structured workout (e.g. "build me a Z2 long run for Sunday" or "give me a tempo session based on my current readiness")
+- Claude returns a workout definition: steps, target HR zones or pace ranges, duration/distance per step
+- The app converts this to a Garmin workout structure and uploads it via the Garmin Connect API
+- The workout appears in Garmin Connect and syncs to your device
+
+### Things to figure out
+- Garmin Connect workout upload API (`post_workout()` in garminconnect) and the required JSON schema for run vs. bike workouts
+- Prompt design to get Claude to reliably output structured workout data (JSON schema vs. natural language + parser)
+- How to handle pace/power targets vs. HR zone targets depending on what the user's device supports
+- UI: dedicated "Create Workout" button or chat command like `/workout`
 
 ---
 

@@ -19,6 +19,12 @@ On startup, the app connects to your Garmin Connect account, fetches your health
 - Recent activities — type, duration, distance, average HR, calories
 - Body composition — weight, body fat %, and muscle mass from a smart scale
 
+**Nutrition data from MacroFactor:**
+- Daily calories, protein, carbs, fat, fiber, and alcohol
+- TDEE (Total Daily Energy Expenditure) and trend weight
+- Target macros from your MacroFactor programme
+- Shown in a dedicated Nutrition tab in the sidebar; optionally included in Claude's context
+
 **What you can ask:**
 - *"How has my sleep been this week?"*
 - *"My stress has been high — what do you recommend?"*
@@ -198,6 +204,22 @@ Choose what data the app fetches and how far back it looks:
 
 Changes take effect immediately — the app re-fetches your data after saving.
 
+### Nutrition
+Import your food log data from MacroFactor to give Claude full context across training, recovery, and fueling.
+
+**Importing MacroFactor data:**
+1. Open the MacroFactor app and go to **Profile → Export Data → Quick Export**
+2. Choose **Daily Summary** export and select your desired date range
+3. Save or share the CSV file to your computer
+4. In the app, go to **Settings → Nutrition** and drag the CSV into the upload area
+5. The Nutrition tab in the sidebar will populate with your macro data
+
+For detailed export instructions see the [MacroFactor user guide](https://macrofactorapp.com/support/).
+
+**AI Context controls** (under Settings → Nutrition → AI Context):
+- **Include daily macro totals** — sends your daily calorie and macro breakdown to Claude (low token cost)
+- **Include full food log** — sends individual food entries; toggle off to reduce token usage if costs are a concern
+
 ### Skills & Personas
 Upload `.json` prompt skills or `.skill` persona files by dragging them into the upload area.
 
@@ -299,6 +321,7 @@ garmin-health-coach/
 ├── settings_manager.py     # Data sync preferences stored in settings.json
 ├── skills_manager.py       # Loads prompt skills (.json) and personas (.skill)
 ├── data_cache.py           # Incremental Garmin data cache (avoids re-fetching old data)
+├── nutrition_parser.py     # MacroFactor CSV parser and nutrition data persistence
 ├── setup_ui.py             # Interactive credential setup wizard for CLI mode
 ├── templates/
 │   ├── index.html          # Main chat UI — split panel with sidebar + chat
@@ -367,7 +390,7 @@ See [ROADMAP.md](ROADMAP.md) for the full list. The main planned additions are:
 
 **Race predictions & Cycling FTP** — Garmin's estimated race times (5k–marathon) and functional threshold power for deeper performance context.
 
-**MacroFactor nutrition integration** — Connect your food log data so Claude can coach across the full picture: training, recovery, and fueling.
+**Custom workout creation** — Generate personalised running and cycling workouts tailored to your current fitness level and goals, then upload them directly to Garmin Connect so they appear on your device.
 
 **Trend alerts** — Flag when a metric crosses a threshold (e.g. resting HR up 5+ bpm for 3 consecutive days, sleep score below 60 two nights in a row).
 
