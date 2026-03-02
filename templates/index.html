@@ -99,7 +99,7 @@
               {% set hrv_e = health_data.hrv | selectattr("date", "equalto", day.date) | list | first if health_data.hrv else none %}
               {% set tr_e  = health_data.training_readiness | selectattr("date", "equalto", day.date) | list | first if health_data.training_readiness else none %}
               <tr>
-                <td class="col-date">{{ day.date | fmt_date_short }}</td>
+                <td class="col-date">{{ day.date | fmt_date }}</td>
                 <td>{{ day.steps | compact if day.steps is not none else "—" }}</td>
                 <td>{{ day.stress_avg if day.stress_avg is not none else "—" }}</td>
                 <td>{{ (day.body_battery | string + "%") if day.body_battery is not none else "—" }}</td>
@@ -137,7 +137,7 @@
               {% for entry in health_data.sleep %}
               {% if 'error' not in entry and entry.total_seconds %}
               <tr>
-                <td class="col-date">{{ entry.date | fmt_date_short }}</td>
+                <td class="col-date">{{ entry.date | fmt_date }}</td>
                 <td class="sleep-cell {% if entry.total_seconds >= 25200 %}sleep-good{% elif entry.total_seconds >= 21600 %}sleep-fair{% else %}sleep-poor{% endif %}">{{ entry.total_seconds | hm }}</td>
                 <td>{{ entry.deep_seconds | hm if entry.deep_seconds else "—" }}</td>
                 <td>{{ entry.rem_seconds  | hm if entry.rem_seconds  else "—" }}</td>
@@ -159,7 +159,7 @@
           <div class="act-row">
             <div class="act-name">{{ act.name or act.type or "Activity" }}</div>
             <div class="act-meta">
-              {{- act.date | fmt_date_short if act.date else "" -}}
+              {{- act.date | fmt_date if act.date else "" -}}
               {%- if act.duration_seconds %} &middot; {{ act.duration_seconds | dur }}{% endif %}
               {%- if act.distance_meters %} &middot; {{ (act.distance_meters / 1000) | round(1) }}&thinsp;km{% endif %}
               {%- if act.avg_hr %} &middot; {{ act.avg_hr | int }}&thinsp;bpm{% endif %}
@@ -186,7 +186,7 @@
             <tbody>
               {% for entry in health_data.body_composition %}
               <tr>
-                <td class="col-date">{{ entry.date | fmt_date_short }}</td>
+                <td class="col-date">{{ entry.date | fmt_date }}</td>
                 <td>{{ entry.weight_kg | round(1) if entry.weight_kg is not none else "—" }}</td>
                 <td>{{ entry.body_fat_pct | round(1) if entry.body_fat_pct is not none else "—" }}</td>
                 <td>{{ entry.muscle_mass_kg | round(1) if entry.muscle_mass_kg is not none else "—" }}</td>

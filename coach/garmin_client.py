@@ -527,28 +527,41 @@ def format_health_summary(health_data: dict, settings: dict | None = None, nutri
         lines.append("")
 
     # ── Nutrition ─────────────────────────────────────────────────────────────
-    if (nutrition_data or nutrition_log) and s.get("nutrition_enabled", True):
+    if nutrition_data or nutrition_log:
         days_back = int(s.get("days_back", DAYS_BACK))
 
         # Daily macro totals — compact summary
-        if nutrition_data:
+        if nutrition_data and s.get("nutrition_enabled", True):
             sorted_dates = sorted(nutrition_data.keys(), reverse=True)[:days_back]
             if sorted_dates:
-                lines.append("NUTRITION — Daily Macros (most recent first):")
+                lines.append("NUTRITION — Daily Summary (most recent first):")
                 for d in sorted_dates:
                     n = nutrition_data[d]
                     parts = [f"  {d}:"]
                     parts.append(f"{int(n['calories'])} kcal")
+                    if n.get("expenditure"):
+                        parts.append(f"TDEE {n['expenditure']} kcal")
                     parts.append(f"P {int(n['protein'])}g")
                     parts.append(f"C {int(n['carbs'])}g")
                     parts.append(f"F {int(n['fat'])}g")
                     if n.get("fiber"):
                         parts.append(f"fiber {n['fiber']}g")
+                    if n.get("alcohol"):
+                        parts.append(f"alcohol {n['alcohol']}g")
+                    if n.get("weight"):
+                        parts.append(f"weight {n['weight']} kg")
+                    if n.get("target_calories"):
+                        parts.append(
+                            f"target {n['target_calories']} kcal"
+                            f" / P {n.get('target_protein', '?')}g"
+                            f" C {n.get('target_carbs', '?')}g"
+                            f" F {n.get('target_fat', '?')}g"
+                        )
                     lines.append(" | ".join(parts))
                 lines.append("")
 
         # Full food item log — detailed per-meal breakdown for Claude
-        if nutrition_log:
+        if nutrition_log and s.get("nutrition_log_enabled", True):
             sorted_dates = sorted(nutrition_log.keys(), reverse=True)[:days_back]
             if sorted_dates:
                 lines.append("NUTRITION — Full Food Log (most recent first):")

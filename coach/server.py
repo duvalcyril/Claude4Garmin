@@ -445,6 +445,22 @@ async def api_upload_nutrition(file: UploadFile = File(...)):
     return JSONResponse({"ok": True, "days_imported": len(new_totals), "total_days": len(merged_totals)})
 
 
+@app.post("/api/nutrition-settings")
+async def api_save_nutrition_settings(request: Request):
+    """Save nutrition AI-context toggles and rebuild coach with updated settings."""
+    global health_summary, coach
+    form = await request.form()
+    settings = sm.load_settings()
+    settings["nutrition_enabled"]     = "nutrition_enabled" in form
+    settings["nutrition_log_enabled"] = "nutrition_log_enabled" in form
+    sm.save_settings(settings)
+    if health_data:
+        health_summary = format_health_summary(health_data, settings, nutrition_data, nutrition_log)
+        _provider = settings.get("ai_provider", "claude")
+        coach = _make_coach(health_summary, user_data_dir() / f"chat_history_{_provider}.json")
+    return RedirectResponse("/settings?success=nutrition_settings_saved#nutrition", status_code=303)
+
+
 @app.post("/api/create-persona")
 async def api_create_persona(request: Request):
     """Create a new .skill file from trigger, description, and persona content."""
