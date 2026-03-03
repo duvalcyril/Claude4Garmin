@@ -129,6 +129,181 @@ def _seconds_to_hm(seconds: Optional[int]) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Trend pre-computation (uses 90-day cached archive)
+# ---------------------------------------------------------------------------
+
+def format_trend_summary(health_data: dict) -> str:
+    """
+    Compute weekly and monthly trend averages from up to 90 days of cached data.
+
+    Metrics summarised: HRV, training readiness, sleep hours/score, steps/day,
+    body weight. Also flags notable directional changes vs prior 30-day period.
+
+    Returns an empty string if fewer than 14 days of data are available so the
+    section is cleanly omitted on first install (cold start graceful fallback).
+    """
+    today = date.today()
+
+    # Build per-date lookup dicts from all available data
+    hrv_map: dict[str, float] = {}
+    for e in health_data.get("hrv", []):
+        if e.get("last_night_avg") and not e.get("error"):
+            hrv_map[e["date"]] = float(e["last_night_avg"])
+
+    readiness_map: dict[str, float] = {}
+    for e in health_data.get("training_readiness", []):
+        if e.get("score") is not None and not e.get("error"):
+            readiness_map[e["date"]] = float(e["score"])
+
+    sleep_map: dict[str, dict] = {}
+    for e in health_data.get("sleep", []):
+        if e.get("total_seconds") and not e.get("error"):
+            sleep_map[e["date"]] = e
+
+    steps_map: dict[str, int] = {}
+    for e in health_data.get("daily_stats", []):
+        if e.get("steps") and not e.get("error"):
+            steps_map[e["date"]] = int(e["steps"])
+
+    weight_map: dict[str, float] = {}
+    for e in health_data.get("body_composition", []):
+        if e.get("weight_kg") and not e.get("error"):
+            weight_map[e["date"]] = float(e["weight_kg"])
+
+    all_dates = set(hrv_map) | set(readiness_map) | set(sleep_map) | set(steps_map)
+    if len(all_dates) < 14:
+        return ""
+
+    def _week_dates(week_num: int) -> list[str]:
+        end_offset = (week_num - 1) * 7
+        return [(today - timedelta(days=end_offset + i)).isoformat() for i in range(7)]
+
+    def _month_dates(month_num: int) -> list[str]:
+        end_offset = (month_num - 1) * 30
+        return [(today - timedelta(days=end_offset + i)).isoformat() for i in range(30)]
+
+    def _avg(data_map: dict, dates: list[str]) -> Optional[float]:
+        vals = [data_map[d] for d in dates if d in data_map]
+        return round(sum(vals) / len(vals), 1) if vals else None
+
+    def _sleep_hours_avg(dates: list[str]) -> Optional[float]:
+        vals = [sleep_map[d]["total_seconds"] / 3600 for d in dates if d in sleep_map]
+        return round(sum(vals) / len(vals), 1) if vals else None
+
+    def _sleep_score_avg(dates: list[str]) -> Optional[float]:
+        vals = [sleep_map[d]["score"] for d in dates if d in sleep_map and sleep_map[d].get("score")]
+        return round(sum(vals) / len(vals), 1) if vals else None
+
+    def _fmt(val: Optional[float], unit: str = "") -> str:
+        return f"{val}{unit}" if val is not None else "N/A"
+
+    # Weekly averages (4 most-recent complete weeks)
+    weeks = [_week_dates(i) for i in range(1, 5)]
+    week_labels = ["This week", "Last week", "2 wks ago", "3 wks ago"]
+
+    hrv_weekly       = [_avg(hrv_map, w) for w in weeks]
+    readiness_weekly = [_avg(readiness_map, w) for w in weeks]
+    sleep_h_weekly   = [_sleep_hours_avg(w) for w in weeks]
+    sleep_s_weekly   = [_sleep_score_avg(w) for w in weeks]
+    steps_weekly     = [_avg(steps_map, w) for w in weeks]
+
+    # Monthly averages (3 × 30-day buckets)
+    months = [_month_dates(i) for i in range(1, 4)]
+    month_labels = ["Last 30 days", "30-60 days ago", "60-90 days ago"]
+
+    hrv_monthly       = [_avg(hrv_map, m) for m in months]
+    readiness_monthly = [_avg(readiness_map, m) for m in months]
+    sleep_h_monthly   = [_sleep_hours_avg(m) for m in months]
+    weight_monthly    = [_avg(weight_map, m) for m in months]
+
+    # Notable trend detection (compare most-recent 30 days vs prior 30 days)
+    trend_notes = []
+
+    def _trend_note(label: str, cur: Optional[float], prev: Optional[float],
+                    threshold_pct: float = 5.0, higher_is_better: bool = True) -> None:
+        if cur is None or prev is None or prev == 0:
+            return
+        change_pct = ((cur - prev) / abs(prev)) * 100
+        if abs(change_pct) < threshold_pct:
+            return
+        direction = "up" if change_pct > 0 else "down"
+        good      = (change_pct > 0) == higher_is_better
+        flag      = "improving" if good else "declining"
+        trend_notes.append(
+            f"  {label}: {flag} ({direction} {abs(change_pct):.0f}% vs prior month)"
+        )
+
+    _trend_note("HRV",         hrv_monthly[0],       hrv_monthly[1] if len(hrv_monthly) > 1 else None)
+    _trend_note("Readiness",   readiness_monthly[0],  readiness_monthly[1] if len(readiness_monthly) > 1 else None)
+    _trend_note("Sleep hours", sleep_h_monthly[0],    sleep_h_monthly[1] if len(sleep_h_monthly) > 1 else None)
+    _trend_note("Body weight", weight_monthly[0],      weight_monthly[1] if len(weight_monthly) > 1 else None,
+                threshold_pct=1.5, higher_is_better=False)
+
+    # Build formatted output
+    lines = ["=== HEALTH TRENDS (computed from up to 90 days of cached data) ===", ""]
+
+    lines.append("WEEKLY AVERAGES (most recent first):")
+    col_w = 12
+    header = f"  {'Metric':<22}" + "".join(f"{lab:>{col_w}}" for lab in week_labels)
+    lines.append(header)
+    lines.append("  " + "-" * (22 + col_w * len(week_labels)))
+
+    def _row(label: str, values: list, fmt_fn=None) -> str:
+        row = f"  {label:<22}"
+        for v in values:
+            if v is None:
+                cell = "N/A"
+            elif fmt_fn:
+                cell = fmt_fn(v)
+            else:
+                cell = str(v)
+            row += f"{cell:>{col_w}}"
+        return row
+
+    if any(v is not None for v in hrv_weekly):
+        lines.append(_row("HRV (ms)", hrv_weekly))
+    if any(v is not None for v in readiness_weekly):
+        lines.append(_row("Readiness (/100)", readiness_weekly))
+    if any(v is not None for v in sleep_h_weekly):
+        lines.append(_row("Sleep (hrs)", sleep_h_weekly))
+    if any(v is not None for v in sleep_s_weekly):
+        lines.append(_row("Sleep score", sleep_s_weekly))
+    if any(v is not None for v in steps_weekly):
+        lines.append(_row("Steps/day", [int(v) if v is not None else None for v in steps_weekly]))
+
+    lines.append("")
+    lines.append("MONTHLY AVERAGES:")
+    col_m = 16
+    header_m = f"  {'Metric':<22}" + "".join(f"{lab:>{col_m}}" for lab in month_labels)
+    lines.append(header_m)
+    lines.append("  " + "-" * (22 + col_m * len(month_labels)))
+
+    def _row_m(label: str, values: list) -> str:
+        row = f"  {label:<22}"
+        for v in values:
+            cell = str(v) if v is not None else "N/A"
+            row += f"{cell:>{col_m}}"
+        return row
+
+    if any(v is not None for v in hrv_monthly):
+        lines.append(_row_m("HRV (ms)", hrv_monthly))
+    if any(v is not None for v in readiness_monthly):
+        lines.append(_row_m("Readiness (/100)", readiness_monthly))
+    if any(v is not None for v in sleep_h_monthly):
+        lines.append(_row_m("Sleep (hrs)", sleep_h_monthly))
+    if any(v is not None for v in weight_monthly):
+        lines.append(_row_m("Weight (kg)", weight_monthly))
+
+    if trend_notes:
+        lines.append("")
+        lines.append("NOTABLE TRENDS (vs prior 30-day period):")
+        lines.extend(trend_notes)
+
+    lines.append("")
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
 # Data fetching
 # ---------------------------------------------------------------------------
 
@@ -373,7 +548,14 @@ def fetch_health_data(
 # Formatting
 # ---------------------------------------------------------------------------
 
-def format_health_summary(health_data: dict, settings: dict | None = None, nutrition_data: dict | None = None, nutrition_log: dict | None = None) -> str:
+def format_health_summary(
+    health_data: dict,
+    settings: dict | None = None,
+    nutrition_data: dict | None = None,
+    nutrition_log: dict | None = None,
+    memory_notes: str = "",
+    trend_summary: str = "",
+) -> str:
     """
     Convert raw Garmin data into a clean, readable text block.
 
@@ -382,10 +564,23 @@ def format_health_summary(health_data: dict, settings: dict | None = None, nutri
 
     The `settings` dict controls which sections and individual metrics appear
     in the output. Disabled metrics are silently omitted.
+
+    Optional memory_notes and trend_summary are injected at the top when provided,
+    giving Claude accumulated coaching memory and pre-computed 90-day trend data.
     """
     s = settings or {}
 
     lines = []
+
+    # ── Coach Memory (accumulated facts from past conversations) ──────────────
+    if memory_notes and memory_notes.strip():
+        lines.append(memory_notes.strip())
+        lines.append("")
+
+    # ── Health Trends (pre-computed from 90-day archive) ─────────────────────
+    if trend_summary and trend_summary.strip():
+        lines.append(trend_summary.strip())
+        lines.append("")
 
     # ── Athlete Profile ───────────────────────────────────────────────────────
     profile = s.get("athlete_profile") or {}

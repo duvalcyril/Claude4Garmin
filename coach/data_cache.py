@@ -24,6 +24,10 @@ from .paths import user_data_dir
 CACHE_FILE = user_data_dir() / "garmin_data.json"
 SCHEMA_VERSION = 1
 
+# How many days to retain in the cache — independent of the days_back fetch window.
+# This allows trend analysis over 90 days even when days_back=7.
+ARCHIVE_DAYS = 90
+
 
 # ---------------------------------------------------------------------------
 # Load / save
@@ -119,13 +123,18 @@ def plan_fetch(cache: dict | None, days_back: int) -> tuple[list, bool]:
 
 def merge(cached_health: dict, new_health: dict, days_back: int) -> dict:
     """
-    Merge freshly fetched data into cached data and trim to the days_back window.
+    Merge freshly fetched data into cached data and trim to ARCHIVE_DAYS.
 
     Per-day lists: cached entries are updated with new ones (new wins on conflict).
     Shared data:   new values replace cached ones when present.
+
+    Note: days_back controls what is *fetched* from the Garmin API (see plan_fetch),
+    but the cache retention is independently controlled by ARCHIVE_DAYS (90 days).
+    This decoupling lets format_trend_summary() access 90-day history even when
+    days_back=7.
     """
     today = date.today()
-    cutoff = (today - timedelta(days=days_back - 1)).isoformat()
+    cutoff = (today - timedelta(days=ARCHIVE_DAYS - 1)).isoformat()
 
     result = dict(cached_health)
 

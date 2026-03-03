@@ -33,6 +33,7 @@
       <button class="settings-nav-item" data-panel="nutrition">Nutrition</button>
       <button class="settings-nav-item" data-panel="personas">Personas</button>
       <button class="settings-nav-item" data-panel="digest">Digest</button>
+      <button class="settings-nav-item" data-panel="memory">Memory</button>
     </nav>
 
     <!-- Content area -->
@@ -701,6 +702,67 @@
         </form>
       </div><!-- /panel-digest -->
 
+      <!-- ── Coach Memory panel ──────────────────────────────────────── -->
+      <div id="panel-memory" class="settings-panel">
+
+        <div class="settings-panel-header">
+          <h1 class="settings-panel-title">Coach Memory</h1>
+          <p class="settings-panel-desc">
+            Your coach automatically extracts key facts from your conversations &mdash;
+            PRs, injuries, goals, training decisions. These notes are injected into every
+            future session so your coach remembers them without you having to repeat yourself.
+          </p>
+        </div>
+
+        <!-- Status card -->
+        <div class="settings-card" style="max-width:620px; margin-bottom:20px;">
+          <div class="form-section-title">Status</div>
+          <p style="font-size:13px; color:var(--text); margin-top:10px;">
+            {% if coach_memory.last_updated %}
+              Last extracted: <strong>{{ coach_memory.last_updated }}</strong>
+              {% if coach_memory.notes %}
+                &nbsp;&middot;&nbsp; Notes on file
+              {% endif %}
+            {% else %}
+              No memory extracted yet. Memory builds automatically after every 10 new conversation turns.
+            {% endif %}
+          </p>
+          <p style="font-size:12px; color:var(--muted); margin-top:8px;">
+            Extraction uses Claude Haiku (fast &amp; cheap) and runs in the background at startup.
+            You can also trigger it manually below.
+          </p>
+          <div style="margin-top:14px; display:flex; gap:12px; align-items:center;">
+            <button type="button" id="extract-now-btn" class="btn-ghost"
+                    style="padding:9px 18px; font-size:13px;">
+              Extract Now
+            </button>
+            <span id="extract-now-status" style="font-size:13px; color:var(--muted);"></span>
+          </div>
+        </div>
+
+        <!-- Edit notes -->
+        <div class="settings-card" style="max-width:620px;">
+          <div class="form-section-title">Memory Notes</div>
+          <p style="font-size:12px; color:var(--muted); margin-top:4px; margin-bottom:14px;">
+            Each entry should start with &ldquo;<code>- </code>&rdquo; (dash space).
+            You can freely add, edit, or remove lines. Changes take effect in your next message.
+          </p>
+          <textarea id="memory-notes-editor"
+                    style="width:100%; min-height:220px; box-sizing:border-box;
+                           font-size:13px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+                           background:var(--surface); color:var(--text);
+                           border:1px solid var(--border); border-radius:6px;
+                           padding:10px 12px; resize:vertical; line-height:1.6;"
+                    placeholder="- User is training for Montreal Half Marathon in October 2026&#10;- User had right knee tendinopathy flare in February 2026&#10;- User's 5k PR is 23:45 (January 2026)">{{ coach_memory.notes or '' }}</textarea>
+          <div style="margin-top:14px; display:flex; gap:12px; align-items:center;">
+            <button type="button" id="save-memory-btn" class="btn-primary"
+                    style="min-width:120px;">Save Notes</button>
+            <span id="save-memory-status" style="font-size:13px;"></span>
+          </div>
+        </div>
+
+      </div><!-- /panel-memory -->
+
     </div><!-- /settings-content -->
   </div><!-- /settings-shell -->
 
@@ -730,7 +792,7 @@
     else if (error && error !== "passwords_mismatch" && error !== "missing_fields") initialPanel = "digest";
     else {
       var hash = window.location.hash.slice(1);
-      if (["connection", "profile", "data", "nutrition", "personas", "digest"].indexOf(hash) !== -1) initialPanel = hash;
+      if (["connection", "profile", "data", "nutrition", "personas", "digest", "memory"].indexOf(hash) !== -1) initialPanel = hash;
     }
     showPanel(initialPanel);
 
@@ -981,6 +1043,62 @@
         nutritionUploadArea.classList.remove("drag-over");
         var file = e.dataTransfer.files[0];
         if (file) uploadNutritionFile(file);
+      });
+    }
+
+    /* ── Coach Memory panel ───────────────────────────────────────────── */
+    var saveMemoryBtn    = document.getElementById("save-memory-btn");
+    var saveMemoryStatus = document.getElementById("save-memory-status");
+    var memoryEditor     = document.getElementById("memory-notes-editor");
+    var extractNowBtn    = document.getElementById("extract-now-btn");
+    var extractNowStatus = document.getElementById("extract-now-status");
+
+    if (saveMemoryBtn) {
+      saveMemoryBtn.addEventListener("click", async function() {
+        saveMemoryBtn.disabled = true;
+        saveMemoryStatus.textContent = "Saving\u2026";
+        saveMemoryStatus.style.color = "var(--muted)";
+        try {
+          var res  = await fetch("/api/memory", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ notes: memoryEditor ? memoryEditor.value : "" }),
+          });
+          var data = await res.json();
+          if (data.ok) {
+            saveMemoryStatus.textContent = "\u2713 Saved.";
+            saveMemoryStatus.style.color = "#065f46";
+          } else {
+            saveMemoryStatus.textContent = "\u2717 Save failed.";
+            saveMemoryStatus.style.color = "#7f1d1d";
+          }
+        } catch (e) {
+          saveMemoryStatus.textContent = "\u2717 " + e.message;
+          saveMemoryStatus.style.color = "#7f1d1d";
+        } finally {
+          saveMemoryBtn.disabled = false;
+        }
+      });
+    }
+
+    if (extractNowBtn) {
+      extractNowBtn.addEventListener("click", async function() {
+        extractNowBtn.disabled = true;
+        extractNowStatus.textContent = "Extracting\u2026";
+        extractNowStatus.style.color = "var(--muted)";
+        try {
+          var res  = await fetch("/api/memory/extract-now", { method: "POST" });
+          var data = await res.json();
+          extractNowStatus.textContent = data.ok
+            ? "\u2713 " + (data.message || "Running in background.")
+            : "\u2717 " + (data.message || "Nothing to extract yet.");
+          extractNowStatus.style.color = data.ok ? "#065f46" : "var(--muted)";
+        } catch (e) {
+          extractNowStatus.textContent = "\u2717 " + e.message;
+          extractNowStatus.style.color = "#7f1d1d";
+        } finally {
+          extractNowBtn.disabled = false;
+        }
       });
     }
   </script>

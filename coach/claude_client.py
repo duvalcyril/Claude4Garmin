@@ -13,6 +13,7 @@ Key design decisions:
 """
 
 import json
+from datetime import datetime
 from pathlib import Path
 
 from anthropic import Anthropic, AsyncAnthropic
@@ -21,6 +22,12 @@ MODEL = "claude-sonnet-4-6"
 
 # Max tokens per response — enough for detailed coaching advice without being verbose
 MAX_TOKENS = 4096
+
+# History compression: keep the active (API-sent) window small to control token cost.
+# Turns beyond ARCHIVE_TRIGGER are moved to a side-car archive file in batches.
+MAX_ACTIVE_TURNS = 60   # target size after archiving
+ARCHIVE_TRIGGER  = 80   # archive fires when history grows past this
+ARCHIVE_BATCH    = 20   # turns moved per archive pass
 
 
 class ClaudeCoach:
@@ -52,8 +59,48 @@ class ClaudeCoach:
                 pass
         return []
 
+    def _archive_history(self) -> None:
+        """
+        When history exceeds ARCHIVE_TRIGGER turns, move the oldest ARCHIVE_BATCH
+        turns to a side-car archive file so the active window stays bounded.
+
+        Archived turns are preserved in data/chat_history_claude_archive.json
+        (each call appends a timestamped batch) but are never sent to the API.
+        Silent failure — archiving is non-fatal.
+        """
+        if len(self.history) <= ARCHIVE_TRIGGER or not self._history_file:
+            return
+
+        to_archive = self.history[:ARCHIVE_BATCH]
+        self.history = self.history[ARCHIVE_BATCH:]
+
+        archive_file = self._history_file.parent / (
+            self._history_file.stem + "_archive.json"
+        )
+        try:
+            existing = (
+                json.loads(archive_file.read_text(encoding="utf-8"))
+                if archive_file.exists()
+                else []
+            )
+        except Exception:
+            existing = []
+
+        existing.append({
+            "archived_at": datetime.now().isoformat(timespec="seconds"),
+            "turns": to_archive,
+        })
+        try:
+            archive_file.write_text(
+                json.dumps(existing, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+        except Exception:
+            pass
+
     def _save_history(self) -> None:
-        """Persist current conversation history to disk."""
+        """Persist current conversation history to disk, archiving old turns first."""
+        self._archive_history()
         if self._history_file:
             try:
                 self._history_file.write_text(

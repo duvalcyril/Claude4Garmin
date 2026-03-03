@@ -40,7 +40,8 @@ from . import data_cache as dc
 from . import nutrition_parser as np_
 from . import settings_manager as sm
 from . import skills_manager as skm
-from .garmin_client import get_garmin_client, fetch_health_data, format_health_summary
+from . import memory_manager as mm
+from .garmin_client import get_garmin_client, fetch_health_data, format_health_summary, format_trend_summary
 from .claude_client import ClaudeCoach
 from .paths import bundle_dir, user_data_dir
 
@@ -73,6 +74,7 @@ nutrition_data: dict = {}
 nutrition_log: dict = {}
 garmin_connected: bool = False
 connection_error: str | None = None
+coach_memory: dict = {}   # loaded/updated by _connect() and memory extraction
 
 
 # ---------------------------------------------------------------------------
@@ -110,7 +112,7 @@ async def _connect() -> None:
     Updates module-level state. Never raises — errors are stored in
     connection_error so the UI can display them gracefully.
     """
-    global coach, health_summary, health_data, nutrition_data, nutrition_log, garmin_connected, connection_error
+    global coach, health_summary, health_data, nutrition_data, nutrition_log, garmin_connected, connection_error, coach_memory
 
     # Keychain → env var fallback, then load .env for any remaining gaps
     cm.inject_into_env()
@@ -146,17 +148,77 @@ async def _connect() -> None:
         health_data = raw
         nutrition_data = np_.load_nutrition()
         nutrition_log = np_.load_nutrition_log()
-        health_summary = format_health_summary(raw, settings, nutrition_data, nutrition_log)
+
+        # Build trend summary and load persistent memory for system prompt injection
+        trend_summary = format_trend_summary(raw)
+        coach_memory  = mm.load_memory()
+        memory_notes  = mm.format_memory_for_prompt(coach_memory)
+
+        health_summary = format_health_summary(
+            raw, settings, nutrition_data, nutrition_log,
+            memory_notes=memory_notes,
+            trend_summary=trend_summary,
+        )
         _provider = settings.get("ai_provider", "claude")
         coach = _make_coach(health_summary, user_data_dir() / f"chat_history_{_provider}.json")
         garmin_connected = True
         connection_error = None
         print("✓ Connected to Garmin. Web server ready.")
+
+        # Launch background memory extraction if enough new turns have accumulated
+        if coach and mm.should_extract(coach.history, coach_memory):
+            asyncio.create_task(_extract_memory_background(coach))
     except Exception as e:
         garmin_connected = False
         connection_error = str(e)
         coach = None
         print(f"✗ Garmin connection failed: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Background memory extraction
+# ---------------------------------------------------------------------------
+
+async def _extract_memory_background(current_coach) -> None:
+    """
+    Background task: extract key facts from recent conversation turns using
+    Claude Haiku, update coach_memory.json, and rebuild the active coach's
+    system prompt so new facts take effect immediately.
+
+    Uses a snapshot of the coach object passed at task creation time — safe
+    against coach being replaced by a concurrent _connect() call.
+    """
+    global coach_memory, health_summary, coach
+
+    try:
+        memory           = mm.load_memory()
+        history_snapshot = list(current_coach.history)   # snapshot to avoid mutation
+        updated          = await asyncio.to_thread(mm.extract_memory, history_snapshot, memory)
+        mm.save_memory(updated)
+        coach_memory = updated
+
+        # Rebuild system prompt in-place — only if coach hasn't been replaced
+        if coach is current_coach and health_data is not None:
+            settings      = sm.load_settings()
+            trend_summary = format_trend_summary(health_data)
+            memory_notes  = mm.format_memory_for_prompt(updated)
+            new_summary   = format_health_summary(
+                health_data, settings, nutrition_data, nutrition_log,
+                memory_notes=memory_notes,
+                trend_summary=trend_summary,
+            )
+            health_summary = new_summary
+            current_coach._base_system_prompt = current_coach._build_system_prompt(new_summary)
+            if not current_coach.active_persona:
+                current_coach.system_prompt = current_coach._base_system_prompt
+
+        note_count = len([
+            l for l in (updated.get("notes") or "").splitlines()
+            if l.strip().startswith("- ")
+        ])
+        print(f"✓ Coach memory updated — {note_count} notes stored.")
+    except Exception as e:
+        print(f"✗ Memory extraction failed (non-fatal): {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -332,6 +394,7 @@ async def settings_page(request: Request, error: str = "", success: str = ""):
         "has_gemini_key":          bool(cm.load_credential("gemini_api_key")),
         "nutrition_status":        _nutrition_status(),
         "athlete_profile":         sm.load_settings().get("athlete_profile") or {},
+        "coach_memory":            mm.load_memory(),
     })
 
 
@@ -383,6 +446,60 @@ async def api_reset():
     if coach:
         coach.reset_history()
     return JSONResponse({"ok": True})
+
+
+@app.get("/api/memory")
+async def api_get_memory():
+    """Return current coach memory notes and metadata."""
+    memory = mm.load_memory()
+    return JSONResponse({
+        "notes":                    memory.get("notes") or "",
+        "last_updated":             memory.get("last_updated"),
+        "last_extracted_from_turn": memory.get("last_extracted_from_turn", 0),
+    })
+
+
+@app.post("/api/memory")
+async def api_save_memory(request: Request):
+    """Save manually edited coach memory notes and rebuild system prompt."""
+    global coach_memory, health_summary, coach
+    body  = await request.json()
+    notes = (body.get("notes") or "").strip()
+
+    memory = mm.load_memory()
+    memory["notes"]        = notes
+    memory["last_updated"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+    mm.save_memory(memory)
+    coach_memory = memory
+
+    # Rebuild system prompt with updated notes
+    if coach and health_data is not None:
+        settings      = sm.load_settings()
+        trend_summary = format_trend_summary(health_data)
+        memory_notes  = mm.format_memory_for_prompt(memory)
+        new_summary   = format_health_summary(
+            health_data, settings, nutrition_data, nutrition_log,
+            memory_notes=memory_notes,
+            trend_summary=trend_summary,
+        )
+        health_summary = new_summary
+        coach._base_system_prompt = coach._build_system_prompt(new_summary)
+        if not coach.active_persona:
+            coach.system_prompt = coach._base_system_prompt
+
+    return JSONResponse({"ok": True})
+
+
+@app.post("/api/memory/extract-now")
+async def api_extract_memory_now():
+    """Manually trigger a memory extraction pass (runs in background)."""
+    if not coach:
+        raise HTTPException(503, detail="Coach not ready.")
+    current_memory = mm.load_memory()
+    if mm.should_extract(coach.history, current_memory):
+        asyncio.create_task(_extract_memory_background(coach))
+        return JSONResponse({"ok": True, "message": "Extraction started in background."})
+    return JSONResponse({"ok": False, "message": "Not enough new conversation turns to extract yet."})
 
 
 @app.get("/api/skills")
@@ -447,8 +564,14 @@ async def api_upload_nutrition(file: UploadFile = File(...)):
 
     # Rebuild coach context with updated nutrition data
     if health_data:
-        settings = sm.load_settings()
-        health_summary = format_health_summary(health_data, settings, nutrition_data, nutrition_log)
+        settings      = sm.load_settings()
+        trend_summary = format_trend_summary(health_data)
+        memory_notes  = mm.format_memory_for_prompt(mm.load_memory())
+        health_summary = format_health_summary(
+            health_data, settings, nutrition_data, nutrition_log,
+            memory_notes=memory_notes,
+            trend_summary=trend_summary,
+        )
         _provider = settings.get("ai_provider", "claude")
         coach = _make_coach(health_summary, user_data_dir() / f"chat_history_{_provider}.json")
 
@@ -473,7 +596,13 @@ async def api_save_profile(request: Request):
     }
     sm.save_settings(settings)
     if health_data:
-        health_summary = format_health_summary(health_data, settings, nutrition_data, nutrition_log)
+        trend_summary = format_trend_summary(health_data)
+        memory_notes  = mm.format_memory_for_prompt(mm.load_memory())
+        health_summary = format_health_summary(
+            health_data, settings, nutrition_data, nutrition_log,
+            memory_notes=memory_notes,
+            trend_summary=trend_summary,
+        )
         _provider = settings.get("ai_provider", "claude")
         coach = _make_coach(health_summary, user_data_dir() / f"chat_history_{_provider}.json")
     return RedirectResponse("/settings?success=profile_saved#profile", status_code=303)
@@ -489,7 +618,13 @@ async def api_save_nutrition_settings(request: Request):
     settings["nutrition_log_enabled"] = "nutrition_log_enabled" in form
     sm.save_settings(settings)
     if health_data:
-        health_summary = format_health_summary(health_data, settings, nutrition_data, nutrition_log)
+        trend_summary = format_trend_summary(health_data)
+        memory_notes  = mm.format_memory_for_prompt(mm.load_memory())
+        health_summary = format_health_summary(
+            health_data, settings, nutrition_data, nutrition_log,
+            memory_notes=memory_notes,
+            trend_summary=trend_summary,
+        )
         _provider = settings.get("ai_provider", "claude")
         coach = _make_coach(health_summary, user_data_dir() / f"chat_history_{_provider}.json")
     return RedirectResponse("/settings?success=nutrition_settings_saved#nutrition", status_code=303)
