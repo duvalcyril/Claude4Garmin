@@ -189,10 +189,14 @@ Use this data to answer questions and give personalized recommendations."""
         self.history.append({"role": "assistant", "content": full_reply})
         self._save_history()
 
-    async def chat_stream_async(self, user_message: str):
+    async def chat_stream_async(self, user_message: str, display_message: str | None = None):
         """
         Async generator that yields text chunks as Claude produces them.
         Used by the web server (server.py) via SSE. Updates history when complete.
+
+        display_message, if provided, is stored in history instead of user_message.
+        This allows injecting enriched context into the API call while keeping the
+        persisted history clean (e.g., activity detail injection via #N references).
         """
         self.history.append({"role": "user", "content": user_message})
         full_reply = ""
@@ -205,6 +209,9 @@ Use this data to answer questions and give personalized recommendations."""
             async for chunk in stream.text_stream:
                 full_reply += chunk
                 yield chunk
+        # Replace the stored user message with the clean version if provided
+        if display_message is not None:
+            self.history[-1]["content"] = display_message
         self.history.append({"role": "assistant", "content": full_reply})
         self._save_history()
 

@@ -506,15 +506,22 @@ def fetch_health_data(
             raw_acts = client.get_activities(0, activity_count)
             for act in raw_acts:
                 health_data["activities"].append({
-                    "name": _get(act, "activityName"),
+                    "activity_id":    str(_get(act, "activityId") or ""),
+                    "name":           _get(act, "activityName"),
                     # activityType is a nested dict; typeKey is the human label
-                    "type": _get(act, "activityType", "typeKey"),
-                    "date": (_get(act, "startTimeLocal") or "")[:10],
+                    "type":           _get(act, "activityType", "typeKey"),
+                    "date":           (_get(act, "startTimeLocal") or "")[:10],
+                    "start_time":     _get(act, "startTimeLocal"),
                     "duration_seconds": _get(act, "duration"),
+                    "moving_duration": _get(act, "movingDuration"),
                     "distance_meters": _get(act, "distance"),
-                    "avg_hr": _get(act, "averageHR"),
-                    "max_hr": _get(act, "maxHR"),
-                    "calories": _get(act, "calories"),
+                    "avg_hr":         _get(act, "averageHR"),
+                    "max_hr":         _get(act, "maxHR"),
+                    "calories":       _get(act, "calories"),
+                    "elevation_gain": _get(act, "elevationGain"),
+                    "avg_power":      _get(act, "averagePower"),
+                    "avg_cadence":    _get(act, "averageCadence"),
+                    "avg_speed_mps":  _get(act, "averageSpeed"),
                 })
         except Exception as e:
             health_data["activities_error"] = str(e)
@@ -708,14 +715,24 @@ def format_health_summary(
         if not health_data["activities"]:
             lines.append("  No activities found.")
         else:
+            act_type_is = lambda act, *keywords: any(
+                kw in (act.get("type") or "").lower() for kw in keywords
+            )
             for i, act in enumerate(health_data["activities"], 1):
                 label = act.get("name") or act.get("type") or "Activity"
-                parts = [f"  {i}. {label}"]
-                if act.get("date"):
-                    parts.append(act["date"])
-                if act.get("duration_seconds"):
-                    dur_m = int(act["duration_seconds"] // 60)
-                    dur_s = int(act["duration_seconds"] % 60)
+                ref   = f"[#{i}]"
+                # Use start_time for full timestamp, fall back to date
+                ts = (act.get("start_time") or act.get("date") or "")
+                if len(ts) > 10:
+                    ts = ts[:16].replace("T", " ")  # "2026-03-02 17:30"
+                parts = [f"  {i}. {ref} {label}"]
+                if ts:
+                    parts.append(ts)
+                # Duration — prefer moving_duration (excl. pauses), fall back to total
+                dur_secs = act.get("moving_duration") or act.get("duration_seconds")
+                if dur_secs:
+                    dur_m = int(dur_secs // 60)
+                    dur_s = int(dur_secs % 60)
                     parts.append(f"{dur_m}:{dur_s:02d}")
                 if act.get("distance_meters"):
                     parts.append(f"{act['distance_meters'] / 1000:.1f} km")
@@ -723,7 +740,30 @@ def format_health_summary(
                     parts.append(f"avg HR {int(act['avg_hr'])} bpm")
                 if act.get("calories"):
                     parts.append(f"{int(act['calories'])} kcal")
+                # Cycling: show power and cadence
+                if act_type_is(act, "cycling", "bike", "zwift", "indoor"):
+                    if act.get("avg_power"):
+                        parts.append(f"{int(act['avg_power'])} W")
+                    if act.get("avg_cadence"):
+                        parts.append(f"{int(act['avg_cadence'])} rpm")
+                # Running: derive pace from avg_speed_mps
+                elif act_type_is(act, "running", "run", "trail", "walk"):
+                    spd = act.get("avg_speed_mps")
+                    if spd and spd > 0:
+                        pace_min_km = (1000 / spd) / 60
+                        pm = int(pace_min_km)
+                        ps = int((pace_min_km - pm) * 60)
+                        parts.append(f"{pm}:{ps:02d}/km")
+                # Elevation for any outdoor activity
+                elev = act.get("elevation_gain")
+                if elev and elev > 0:
+                    parts.append(f"+{int(elev)} m elev")
                 lines.append(" | ".join(parts))
+
+            if any(a.get("activity_id") for a in health_data["activities"]):
+                lines.append(
+                    '  (Ask "analyze workout #N" for HR zones, splits & exercise detail)'
+                )
 
         if "activities_error" in health_data:
             lines.append(

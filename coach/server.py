@@ -35,6 +35,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
+from . import activity_cache as ac
 from . import credentials_manager as cm
 from . import data_cache as dc
 from . import nutrition_parser as np_
@@ -74,7 +75,8 @@ nutrition_data: dict = {}
 nutrition_log: dict = {}
 garmin_connected: bool = False
 connection_error: str | None = None
-coach_memory: dict = {}   # loaded/updated by _connect() and memory extraction
+coach_memory: dict = {}       # loaded/updated by _connect() and memory extraction
+activity_details: dict = {}   # keyed by activity_id; loaded/updated by _connect()
 
 
 # ---------------------------------------------------------------------------
@@ -112,7 +114,7 @@ async def _connect() -> None:
     Updates module-level state. Never raises — errors are stored in
     connection_error so the UI can display them gracefully.
     """
-    global coach, health_summary, health_data, nutrition_data, nutrition_log, garmin_connected, connection_error, coach_memory
+    global coach, health_summary, health_data, nutrition_data, nutrition_log, garmin_connected, connection_error, coach_memory, activity_details
 
     # Keychain → env var fallback, then load .env for any remaining gaps
     cm.inject_into_env()
@@ -164,6 +166,12 @@ async def _connect() -> None:
         garmin_connected = True
         connection_error = None
         print("✓ Connected to Garmin. Web server ready.")
+
+        # Load activity detail cache and enrich new activity IDs in background
+        activity_details = ac.load_activity_details()
+        missing_ids = ac.get_missing_ids(raw.get("activities", []), activity_details)
+        if missing_ids:
+            asyncio.create_task(_enrich_activities_background(garmin, missing_ids, settings))
 
         # Launch background memory extraction if enough new turns have accumulated
         if coach and mm.should_extract(coach.history, coach_memory):
@@ -219,6 +227,64 @@ async def _extract_memory_background(current_coach) -> None:
         print(f"✓ Coach memory updated — {note_count} notes stored.")
     except Exception as e:
         print(f"✗ Memory extraction failed (non-fatal): {e}")
+
+
+# ---------------------------------------------------------------------------
+# Background activity enrichment
+# ---------------------------------------------------------------------------
+
+async def _enrich_activities_background(garmin, missing_ids: list, settings: dict) -> None:
+    """
+    Fetch per-activity enrichments (HR zones, splits, exercise sets, power zones)
+    for new activity IDs and cache them to data/activity_details.json.
+
+    Runs in background after startup. Saves after each activity — fault-tolerant
+    if interrupted. Updates the module-level activity_details dict when done.
+    """
+    global activity_details
+
+    details = ac.load_activity_details()
+
+    for activity_id in missing_ids:
+        entry = {"fetched_at": datetime.now().isoformat(timespec="seconds")}
+
+        if settings.get("activity_detail_hr_zones", True):
+            try:
+                entry["hr_zones"] = await asyncio.to_thread(
+                    garmin.get_activity_hr_in_timezones, activity_id
+                )
+            except Exception as e:
+                entry["hr_zones_error"] = str(e)
+
+        if settings.get("activity_detail_splits", True):
+            try:
+                entry["splits"] = await asyncio.to_thread(
+                    garmin.get_activity_splits, activity_id
+                )
+            except Exception as e:
+                entry["splits_error"] = str(e)
+
+        if settings.get("activity_detail_exercise_sets", True):
+            try:
+                entry["exercise_sets"] = await asyncio.to_thread(
+                    garmin.get_activity_exercise_sets, activity_id
+                )
+            except Exception as e:
+                entry["exercise_sets_error"] = str(e)
+
+        if settings.get("activity_detail_power_zones", True):
+            try:
+                entry["power_zones"] = await asyncio.to_thread(
+                    garmin.get_activity_power_in_timezones, activity_id
+                )
+            except Exception as e:
+                entry["power_zones_error"] = str(e)
+
+        details[activity_id] = entry
+        ac.save_activity_details(details)   # save after each — fault-tolerant
+
+    activity_details = details
+    print(f"✓ Activity enrichment done — {len(missing_ids)} new activities cached.")
 
 
 # ---------------------------------------------------------------------------
@@ -426,12 +492,37 @@ class PersonaRequest(BaseModel):
 
 @app.post("/api/chat")
 async def api_chat(body: ChatRequest):
+    import re
     if not coach:
         raise HTTPException(503, detail="Coach not ready. Please check Settings.")
 
+    # Detect "#N" workout references and inject cached detail into this turn only
+    api_message     = body.message   # what gets sent to the AI (may be enriched)
+    display_message = None           # what gets stored in history (clean version)
+
+    match = re.search(r"#(\d+)", body.message)
+    if match:
+        idx = int(match.group(1)) - 1   # 1-indexed → 0-indexed
+        activities = (health_data or {}).get("activities", [])
+        if 0 <= idx < len(activities):
+            act    = activities[idx]
+            act_id = act.get("activity_id", "")
+            if act_id and act_id in activity_details:
+                detail_text = ac.format_activity_detail_for_prompt(
+                    act, activity_details[act_id], sm.load_settings()
+                )
+                if detail_text:
+                    act_label = act.get("name") or act.get("type") or "Activity"
+                    act_date  = act.get("date", "")
+                    api_message = (
+                        f"[WORKOUT DETAIL for {act_label} on {act_date}:\n{detail_text}]\n\n"
+                        f"{body.message}"
+                    )
+                    display_message = body.message
+
     async def generate():
         try:
-            async for chunk in coach.chat_stream_async(body.message):
+            async for chunk in coach.chat_stream_async(api_message, display_message=display_message):
                 yield f"data: {json.dumps({'chunk': chunk})}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
@@ -500,6 +591,14 @@ async def api_extract_memory_now():
         asyncio.create_task(_extract_memory_background(coach))
         return JSONResponse({"ok": True, "message": "Extraction started in background."})
     return JSONResponse({"ok": False, "message": "Not enough new conversation turns to extract yet."})
+
+
+@app.get("/api/activity-detail/{activity_id}")
+async def api_get_activity_detail(activity_id: str):
+    """Return cached enrichment data for a specific activity."""
+    if activity_id not in activity_details:
+        raise HTTPException(404, detail="Activity detail not cached yet.")
+    return JSONResponse(activity_details[activity_id])
 
 
 @app.get("/api/skills")
@@ -727,8 +826,10 @@ async def api_save_data_settings(request: Request):
     """Save data sync preferences and re-fetch Garmin data with the new config."""
     form = await request.form()
 
-    # Checkboxes are only present in form data when checked; absence means False
-    settings = {
+    # Load-merge-save: preserves keys managed by other settings forms
+    # (athlete_profile, digest_*, ai_provider, etc.) that aren't in this form.
+    existing = sm.load_settings()
+    existing.update({
         "days_back": int(form.get("days_back", 7)),
         "daily_stats_enabled": "daily_stats_enabled" in form,
         "sleep_enabled": "sleep_enabled" in form,
@@ -753,9 +854,13 @@ async def api_save_data_settings(request: Request):
         "metric_body_weight": "metric_body_weight" in form,
         "metric_body_fat": "metric_body_fat" in form,
         "metric_body_muscle": "metric_body_muscle" in form,
-    }
-
-    sm.save_settings(settings)
+        # Activity detail enrichment toggles
+        "activity_detail_hr_zones":      "activity_detail_hr_zones"      in form,
+        "activity_detail_splits":        "activity_detail_splits"        in form,
+        "activity_detail_exercise_sets": "activity_detail_exercise_sets" in form,
+        "activity_detail_power_zones":   "activity_detail_power_zones"   in form,
+    })
+    sm.save_settings(existing)
 
     # Re-fetch Garmin data with the new configuration if we're connected
     if garmin_connected:

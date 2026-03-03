@@ -194,10 +194,14 @@ class GeminiCoach:
         self.history.append({"role": "model", "parts": [{"text": full_reply}]})
         self._save_history()
 
-    async def chat_stream_async(self, user_message: str):
+    async def chat_stream_async(self, user_message: str, display_message: str | None = None):
         """
         Async generator used by the web server (server.py) via SSE.
         Yields tokens as they arrive — true streaming via the google-genai SDK.
+
+        display_message, if provided, is stored in history instead of user_message.
+        This allows injecting enriched context into the API call while keeping the
+        persisted history clean (e.g., activity detail injection via #N references).
         """
         full_reply = ""
         stream = await self._client.aio.models.generate_content_stream(
@@ -209,7 +213,8 @@ class GeminiCoach:
             if chunk.text:
                 full_reply += chunk.text
                 yield chunk.text
-        self.history.append({"role": "user",  "parts": [{"text": user_message}]})
+        stored_msg = display_message if display_message is not None else user_message
+        self.history.append({"role": "user",  "parts": [{"text": stored_msg}]})
         self.history.append({"role": "model", "parts": [{"text": full_reply}]})
         self._save_history()
 

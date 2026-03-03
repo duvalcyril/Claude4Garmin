@@ -371,6 +371,36 @@
                     </select>
                   </div>
                 </div>
+                <div data-parent="activities_enabled" style="margin-top:16px; padding-top:14px; border-top:1px solid var(--border);">
+                  <p style="font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 4px;">
+                    Workout Detail (fetched once, stored locally)
+                  </p>
+                  <p style="font-size:12px; color:var(--muted); margin:0 0 10px; line-height:1.5;">
+                    Only injected when you ask for a specific workout breakdown.
+                  </p>
+                  <div class="metric-grid">
+                    <label class="metric-label">
+                      <input type="checkbox" name="activity_detail_hr_zones"
+                             {% if data_settings.activity_detail_hr_zones %}checked{% endif %}>
+                      HR Zones
+                    </label>
+                    <label class="metric-label">
+                      <input type="checkbox" name="activity_detail_splits"
+                             {% if data_settings.activity_detail_splits %}checked{% endif %}>
+                      Lap Splits
+                    </label>
+                    <label class="metric-label">
+                      <input type="checkbox" name="activity_detail_exercise_sets"
+                             {% if data_settings.activity_detail_exercise_sets %}checked{% endif %}>
+                      Exercise Sets (strength)
+                    </label>
+                    <label class="metric-label">
+                      <input type="checkbox" name="activity_detail_power_zones"
+                             {% if data_settings.activity_detail_power_zones %}checked{% endif %}>
+                      Power Zones (cycling)
+                    </label>
+                  </div>
+                </div>
               </div>
 
               <div class="settings-card">

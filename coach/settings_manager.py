@@ -31,6 +31,11 @@ Settings structure (all keys with defaults):
   metric_body_weight     bool  — show weight
   metric_body_fat        bool  — show body fat %
   metric_body_muscle     bool  — show muscle mass
+
+  activity_detail_hr_zones      bool  — fetch/cache HR zones per activity
+  activity_detail_splits        bool  — fetch/cache lap splits per activity
+  activity_detail_exercise_sets bool  — fetch/cache exercise sets (strength)
+  activity_detail_power_zones   bool  — fetch/cache power zones (cycling)
 """
 
 import json
@@ -76,6 +81,11 @@ DEFAULTS: dict = {
     # AI Provider
     "ai_provider": "claude",
     "ai_model":    "claude-sonnet-4-6",
+    # Activity detail enrichments — fetched once per activityId, stored locally
+    "activity_detail_hr_zones":      True,
+    "activity_detail_splits":        True,
+    "activity_detail_exercise_sets": True,
+    "activity_detail_power_zones":   True,
 }
 
 
