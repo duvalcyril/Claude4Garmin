@@ -45,17 +45,21 @@ log = logging.getLogger(__name__)
 DIGEST_PROMPT = (
     "Based on my health data from yesterday, respond with ONLY a JSON object — no markdown, no extra text. "
     "The JSON must have exactly three string fields:\n\n"
-    '  "recommendation": a 3–5 sentence personalised coaching paragraph. '
-    "Reference specific numbers from my data (HRV, readiness, sleep, steps, etc.). "
-    "Explain what they mean in context — not just what the numbers are, but what they imply for how I should "
-    "train or recover today. Call out anything that stands out as notably good or worth watching. "
-    "End with one concrete, actionable suggestion for today. Be direct and specific — avoid generic wellness clichés.\n\n"
+    '  "recommendation": a personalised coaching note structured as 2–3 short paragraphs separated by a '
+    "blank line (\\n\\n). Keep each paragraph to 2–3 sentences max.\n"
+    "  Paragraph 1: highlight 1–2 key metrics from yesterday (HRV, readiness, sleep, steps, etc.) and what "
+    "they imply — not just the numbers, but what they mean for how I should train or recover.\n"
+    "  Paragraph 2: note any trend or pattern worth paying attention to (positive or concerning).\n"
+    "  Paragraph 3: one concrete, actionable suggestion for today — specific and direct, no wellness clichés. "
+    "If a workout is planned for today, name it and give a specific tip or encouragement for it "
+    "(e.g. target zone, pacing strategy, what to focus on). "
+    "If today is a rest or recovery day, say so clearly and explain why it matters given yesterday's data.\n\n"
     '  "quote": a short motivational quote (one or two sentences) relevant to sport, resilience, health, or '
     "performance. Choose something that fits my current situation — e.g. recovery or patience-themed if "
     "readiness is low or I'm strained; ambition or execution-themed if I'm in a productive or peaking phase. "
     "Vary the source: athletes, coaches, philosophers, writers — not always the same names.\n\n"
     '  "quote_author": the person the quote is attributed to (name only, no dates or titles).\n\n'
-    'Example format: {"recommendation": "...", "quote": "...", "quote_author": "..."}'
+    'Example format: {"recommendation": "Paragraph one.\\n\\nParagraph two.\\n\\nParagraph three.", "quote": "...", "quote_author": "..."}'
 )
 
 
@@ -152,11 +156,85 @@ def build_template_vars(raw: dict, coach_text: str, target_date: date, quote: st
 # Email rendering and sending
 # ---------------------------------------------------------------------------
 
+def _build_today_context(settings: dict, target_date: date) -> str:
+    """
+    Build a short addendum for the DIGEST_PROMPT that anchors Claude to today's
+    date and any workout the user has planned.
+
+    Returns an empty string if no athlete profile is configured, so the base
+    prompt still works well for users who haven't filled in their profile.
+    """
+    profile = settings.get("athlete_profile") or {}
+    today   = target_date + timedelta(days=1)    # digest covers yesterday; today = +1
+    day_name = today.strftime("%A")              # e.g. "Tuesday"
+
+    parts = [f"\n\nToday is {day_name}, {today.strftime('%B %#d')}."]
+
+    training_plan = (profile.get("training_plan") or "").strip()
+    if training_plan:
+        parts.append(
+            f" The athlete's training plan is: {training_plan}."
+            f" Based on this plan, what is likely scheduled for {day_name}?"
+            " If a specific session is planned, reference it explicitly in your recommendation"
+            " — name the workout, give encouragement, and adjust your recovery/effort advice accordingly."
+            " If no workout is scheduled (rest or easy day), acknowledge that and frame today's advice around recovery."
+        )
+    else:
+        parts.append(
+            " Tailor your Paragraph 3 suggestion to whether today looks like a good day to train hard,"
+            " recover, or go easy — based on the readiness, HRV, and stress data."
+        )
+
+    upcoming = (profile.get("upcoming_events") or "").strip()
+    if upcoming:
+        parts.append(f" Upcoming events to keep in mind: {upcoming}.")
+
+    return "".join(parts)
+
+
 def render_email_html(template_vars: dict) -> str:
     """Render digest_email.html via Jinja2 (already installed as a FastAPI dep)."""
     from jinja2 import Environment, FileSystemLoader
     env = Environment(loader=FileSystemLoader(str(bundle_dir() / "templates")))
     return env.get_template("digest_email.html").render(**template_vars)
+
+
+def _html_to_plain(template_vars: dict) -> str:
+    """
+    Build a minimal plain-text fallback for email clients that prefer text/plain.
+    Mirrors the structure of the HTML template without any markup.
+    """
+    v = template_vars
+    lines = [
+        f"YOUR HEALTH DIGEST — {v['date_label']}",
+        "",
+        "YESTERDAY'S STATS",
+    ]
+    for m in v.get("stat_metrics", []):
+        lines.append(f"  {m['label']}: {m['value']}")
+    lines += [
+        "",
+        "RECOVERY",
+        f"  HRV: {v['hrv_avg']} ({v['hrv_status']})",
+        f"  Readiness: {v['readiness_score']}/100",
+        f"  Training Status: {v['training_status']}",
+        "",
+        "SLEEP",
+        f"  Total: {v['sleep_total']}  |  Deep: {v['sleep_deep']}  |  REM: {v['sleep_rem']}  |  Score: {v['sleep_score']}/100",
+        "",
+        "COACH'S TAKE",
+        "",
+        v.get("coach_recommendation", ""),
+    ]
+    if v.get("quote"):
+        lines += [
+            "",
+            f'"{v["quote"]}"',
+        ]
+        if v.get("quote_author"):
+            lines.append(f'  — {v["quote_author"]}')
+    lines += ["", "—", "Garmin Health Coach"]
+    return "\n".join(lines)
 
 
 def send_email(
@@ -165,12 +243,16 @@ def send_email(
     sender: str,
     app_password: str,
     recipient: str,
+    template_vars: dict | None = None,
 ) -> None:
-    """Send an HTML email via Gmail SMTP SSL (port 465)."""
+    """Send an HTML email via Gmail SMTP SSL (port 465) with a plain-text fallback."""
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"]    = sender
     msg["To"]      = recipient
+    # Plain-text part first — email clients pick the last compatible part (HTML preferred)
+    if template_vars:
+        msg.attach(MIMEText(_html_to_plain(template_vars), "plain", "utf-8"))
     msg.attach(MIMEText(html, "html", "utf-8"))
 
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
@@ -223,7 +305,11 @@ def run_digest(target_date: date | None = None) -> None:
     raw     = fetch_health_data(garmin, digest_settings)
     summary = format_health_summary(raw, digest_settings, load_nutrition())
 
-    raw_response = ClaudeCoach(health_summary=summary).chat(DIGEST_PROMPT)
+    # Build a "today" context block so Claude can tailor advice to the planned workout
+    today_context = _build_today_context(settings, target_date)
+    prompt = DIGEST_PROMPT + today_context
+
+    raw_response = ClaudeCoach(health_summary=summary).chat(prompt)
 
     # Parse structured JSON response; fall back gracefully if Claude doesn't comply
     try:
@@ -240,7 +326,7 @@ def run_digest(target_date: date | None = None) -> None:
     html_body      = render_email_html(template_vars)
 
     subject = f"Your Health Digest \u2014 {target_date.strftime('%b %#d')}"
-    send_email(html_body, subject, sender, app_password, recipient)
+    send_email(html_body, subject, sender, app_password, recipient, template_vars)
     log.info("Digest sent successfully to %s", recipient)
 
 
