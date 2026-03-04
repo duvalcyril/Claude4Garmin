@@ -772,6 +772,7 @@ html, body {
 
 .sidebar-tab {
   flex: 1;
+  min-width: 0;
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
@@ -783,8 +784,6 @@ html, body {
   color: var(--muted);
   cursor: pointer;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   transition: color .15s, border-color .15s;
   margin-bottom: -1px;
 }

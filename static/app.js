@@ -256,22 +256,6 @@ async function resetConversation() {
   appendMessage("coach", "Conversation reset. What would you like to explore?");
 }
 
-// ── Sidebar tab switching ─────────────────────────────────────────────
-
-function initTabs() {
-  document.querySelectorAll(".sidebar-tab").forEach(function(tab) {
-    tab.addEventListener("click", function() {
-      document.querySelectorAll(".sidebar-tab").forEach(function(t) { t.classList.remove("active"); });
-      document.querySelectorAll(".tab-panel").forEach(function(p) { p.classList.remove("active"); });
-      tab.classList.add("active");
-      var panel = document.getElementById(tab.dataset.tab);
-      if (panel) panel.classList.add("active");
-    });
-  });
-}
-
-initTabs();
-
 // ── Refresh Garmin data ───────────────────────────────────────────────
 
 async function refreshData() {
@@ -286,11 +270,11 @@ async function refreshData() {
   refreshBtn.disabled = false;
 
   if (data.ok) {
-    // Fetch fresh sidebar HTML and swap it in — no page reload, conversation preserved
+    // Fetch fresh sidebar HTML and swap it in — no page reload, conversation preserved.
+    // Tab switching uses event delegation on the sidebar element so no re-binding needed.
     try {
       const html = await fetch("/api/sidebar-html").then(r => r.text());
       document.getElementById("sidebar").innerHTML = html;
-      initTabs();  // re-bind tab click handlers on the new DOM nodes
     } catch {
       // Sidebar update failed — data is still fresh on the server side
     }
@@ -345,3 +329,15 @@ inputEl.addEventListener("keydown", (e) => {
 
 // Focus input on load
 inputEl.focus();
+
+// ── Sidebar tab switching (event delegation — survives sidebar HTML swaps) ──
+
+document.getElementById("sidebar").addEventListener("click", function(e) {
+  const tab = e.target.closest(".sidebar-tab");
+  if (!tab) return;
+  document.querySelectorAll(".sidebar-tab").forEach(function(t) { t.classList.remove("active"); });
+  document.querySelectorAll(".tab-panel").forEach(function(p) { p.classList.remove("active"); });
+  tab.classList.add("active");
+  var panel = document.getElementById(tab.dataset.tab);
+  if (panel) panel.classList.add("active");
+});
