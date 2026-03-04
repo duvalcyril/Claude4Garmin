@@ -69,7 +69,7 @@ html, body {
 
 /* ── Sidebar ──────────────────────────────────────────────────────── */
 .sidebar {
-  width: 300px;
+  width: 360px;
   flex-shrink: 0;
   background: var(--surface);
   border-right: 1px solid var(--border);
@@ -775,13 +775,16 @@ html, body {
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
-  padding: 8px 4px;
-  font-size: 11px;
+  padding: 8px 2px;
+  font-size: 10.5px;
   font-weight: 600;
-  letter-spacing: .04em;
+  letter-spacing: .02em;
   text-transform: uppercase;
   color: var(--muted);
   cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   transition: color .15s, border-color .15s;
   margin-bottom: -1px;
 }
