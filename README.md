@@ -32,8 +32,9 @@ On startup, the app connects to your Garmin Connect account, fetches your health
 - *"Which day this week had my best body battery?"*
 - *"My training status is Strained — should I take a rest day?"*
 - *"How is my body composition trending over the past month?"*
+- *"Analyze workout #1"* — gets a full breakdown with HR zones, lap splits, and exercise sets
 
-Claude maintains the full conversation history so follow-up questions work naturally.
+Claude maintains the full conversation history so follow-up questions work naturally. You can also switch to Google Gemini as the AI backend in Settings → Connection.
 
 ---
 
@@ -210,7 +211,8 @@ Choose what data the app fetches and how far back it looks:
 - **Time range** — 7, 14, or 30 days of history
 - **Daily Stats** — steps, calories, stress, body battery, resting HR, distance
 - **Sleep** — total duration, deep, REM, light sleep, sleep score
-- **Activities** — toggle on/off, choose how many recent activities to show (5, 10, or 20)
+- **Activities** — toggle on/off, choose how many recent activities to show (5, 10, or 20); each activity is shown with a `#N` reference number so you can ask for a detailed breakdown in chat
+- **Workout Detail** — when Activities is enabled, the app silently fetches and caches HR zones, lap splits, exercise sets (strength), and power zones (cycling) for each new activity. This detail is never added to Claude's context automatically — it's only injected when you ask, e.g. *"analyze workout #1"*. Toggles: HR Zones, Lap Splits, Exercise Sets, Power Zones.
 - **HRV** — overnight HRV average and status shown alongside daily stats
 - **Training Readiness** — 0–100 score shown alongside daily stats
 - **Training Status** — rolling label shown in the sidebar header
@@ -276,7 +278,9 @@ Your Garmin email/password and Anthropic API key are stored in your **OS keychai
 
 Your other settings (which metrics to show, date range, etc.) are saved in a file called `settings.json`:
 - **Packaged app (Option A):** `%APPDATA%\GarminHealthCoach\settings.json` on Windows, `~/Library/Application Support/GarminHealthCoach/settings.json` on macOS
-- **Running from source (Option B):** `settings.json` in the project folder
+- **Running from source (Option B):** `data/settings.json` in the project folder
+
+Other local data (Garmin cache, activity detail cache, conversation history, coach memory) is stored alongside `settings.json` in the same directory.
 
 ---
 
@@ -333,38 +337,67 @@ If you see a tray icon but the browser doesn't open, click the tray icon and cho
 
 ```
 garmin-health-coach/
-├── launcher.py             # Desktop entry point — tray icon, server thread, browser open
-├── server.py               # FastAPI web server — all routes and API endpoints
-├── main.py                 # CLI entry point — terminal chat loop (no browser)
-├── paths.py                # Path resolution for dev vs. packaged (PyInstaller) modes
-├── digest.py               # Standalone daily digest emailer (Windows Task Scheduler)
-├── garmin_client.py        # Garmin Connect auth, data fetching, formatting
-├── claude_client.py        # Claude API wrapper with streaming, history, personas
-├── credentials_manager.py  # OS keychain read/write via the keyring library
-├── settings_manager.py     # Data sync preferences stored in settings.json
-├── skills_manager.py       # Loads prompt skills (.json) and personas (.skill)
-├── data_cache.py           # Incremental Garmin data cache (avoids re-fetching old data)
-├── nutrition_parser.py     # MacroFactor CSV parser and nutrition data persistence
-├── setup_ui.py             # Interactive credential setup wizard for CLI mode
+├── launcher.py                  # Desktop entry point — tray icon, server thread, browser open
+├── main.py                      # CLI entry point — terminal chat loop (no browser)
+├── digest.py                    # Standalone daily digest emailer (Windows Task Scheduler)
+│
+├── coach/                       # Core Python package
+│   ├── __init__.py
+│   ├── server.py                # FastAPI web server — all routes and API endpoints
+│   ├── garmin_client.py         # Garmin Connect auth, data fetching, formatting
+│   ├── claude_client.py         # Claude API wrapper with streaming, history, memory
+│   ├── gemini_coach.py          # Google Gemini AI alternative (same interface as Claude)
+│   ├── activity_cache.py        # Per-activity enrichment cache (HR zones, splits, sets)
+│   ├── data_cache.py            # Incremental 90-day Garmin data cache
+│   ├── memory_manager.py        # Extracts & persists key coaching facts from history
+│   ├── nutrition_parser.py      # MacroFactor CSV parser and nutrition data persistence
+│   ├── credentials_manager.py   # OS keychain read/write via the keyring library
+│   ├── settings_manager.py      # Data sync preferences stored in settings.json
+│   ├── skills_manager.py        # Loads prompt skills (.json) and personas (.skill)
+│   ├── paths.py                 # Path resolution for dev vs. packaged (PyInstaller) modes
+│   └── setup_ui.py              # Interactive credential setup wizard for CLI mode
+│
 ├── templates/
-│   ├── index.html          # Main chat UI — split panel with sidebar + chat
-│   ├── settings.html       # Settings page — credentials, data prefs, skills, digest
-│   └── digest_email.html   # HTML email template for the daily digest
+│   ├── index.html               # Main chat UI — split panel with sidebar + chat
+│   ├── sidebar_content.html     # Sidebar Jinja2 partial (reused for live DOM swaps)
+│   ├── settings.html            # Settings page — credentials, data prefs, skills, digest
+│   └── digest_email.html        # HTML email template for the daily digest
+│
 ├── static/
-│   ├── style.css           # App styles
-│   └── app.js              # SSE streaming, chat logic, skill picker
+│   ├── style.css                # App styles
+│   └── app.js                   # SSE streaming, chat logic, skill picker, sidebar swap
+│
+├── skills/                      # Built-in prompt skills (JSON) and persona files
+│   ├── weekly-report.json
+│   ├── sleep-analysis.json
+│   ├── activity-summary.json
+│   ├── recovery-check.json
+│   └── stress-report.json
+│
+├── data/                        # Runtime data (gitignored except .gitkeep)
+│   ├── garmin_data.json         # Cached Garmin health data (90-day rolling window)
+│   ├── activity_details.json    # Per-activity enrichments cache (HR zones, splits, etc.)
+│   ├── coach_memory.json        # Persistent coaching facts extracted from history
+│   ├── nutrition.json           # Parsed MacroFactor nutrition data
+│   ├── chat_history_claude.json # Claude conversation history
+│   ├── chat_history_gemini.json # Gemini conversation history
+│   ├── settings.json            # User settings (when running from source)
+│   ├── .garth_session/          # Garmin OAuth session tokens
+│   └── digest.log               # Daily digest run log
+│
 ├── assets/
-│   ├── icon.png            # App icon (512×512 PNG)
-│   ├── icon.ico            # Windows icon
-│   └── icon.icns           # macOS icon
-├── garmin_coach.spec       # PyInstaller build specification
-├── build_windows.bat       # Windows build script → GarminHealthCoach-windows.zip
-├── build_macos.sh          # macOS build script → GarminHealthCoach.dmg
+│   ├── icon.png                 # App icon (512×512 PNG)
+│   ├── icon.ico                 # Windows icon
+│   └── icon.icns                # macOS icon
+│
+├── garmin_coach.spec            # PyInstaller build specification
+├── build_windows.bat            # Windows build script → GarminHealthCoach-windows.zip
+├── build_macos.sh               # macOS build script → GarminHealthCoach.dmg
 ├── .github/
 │   └── workflows/
-│       └── release.yml     # GitHub Actions: build both platforms on tag push
+│       └── release.yml          # GitHub Actions: build both platforms on tag push
 ├── requirements.txt
-├── .env.example            # Reference for environment variable names
+├── .env.example                 # Reference for environment variable names
 ├── .gitignore
 └── ROADMAP.md
 ```
@@ -408,8 +441,6 @@ git push origin v1.0.0
 ## What's coming
 
 See [ROADMAP.md](ROADMAP.md) for the full list. The main planned additions are:
-
-**HR time-in-zones** — Zone breakdown per activity (Z1–Z5 minutes) so Claude can analyse aerobic vs. anaerobic distribution and flag if easy runs are drifting out of Zone 2.
 
 **Race predictions & Cycling FTP** — Garmin's estimated race times (5k–marathon) and functional threshold power for deeper performance context.
 
