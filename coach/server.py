@@ -491,11 +491,22 @@ async def api_save_network_settings(request: Request):
 async def api_restart():
     """Restart the app process to apply settings that require it (e.g. LAN access)."""
     import os
+    import subprocess
 
     def _do_restart():
         import time
         time.sleep(0.8)  # let the JSON response reach the browser first
-        os.execv(sys.executable, [sys.executable] + sys.argv)
+
+        if getattr(sys, "frozen", False):
+            # Packaged exe — re-exec the exe with no extra args
+            os.execv(sys.executable, [sys.executable])
+        else:
+            # Running from source — explicitly relaunch launcher.py
+            # (avoids relying on sys.argv which can be unreliable in venv/conda setups)
+            project_root = str(Path(__file__).parent.parent)
+            launcher = str(Path(__file__).parent.parent / "launcher.py")
+            subprocess.Popen([sys.executable, launcher], cwd=project_root)
+            os._exit(0)  # exit current process; new one will take over
 
     threading.Thread(target=_do_restart, daemon=True).start()
     return JSONResponse({"ok": True})
