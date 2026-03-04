@@ -83,8 +83,10 @@ def _start_server(port: int) -> None:
     """Run uvicorn in this thread (blocks until shutdown)."""
     import uvicorn
     import coach.server  # noqa: F401 — registers the FastAPI app
+    import coach.settings_manager as sm
     from coach.server import app
-    uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
+    host = "0.0.0.0" if sm.load_settings().get("lan_access") else "127.0.0.1"
+    uvicorn.run(app, host=host, port=port, log_level="warning")
 
 
 # ---------------------------------------------------------------------------

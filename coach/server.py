@@ -438,6 +438,18 @@ def _nutrition_status() -> dict | None:
     return {"days": len(data), "from": dates[0], "to": dates[-1]}
 
 
+def _get_local_ip() -> str:
+    """Detect the machine's primary LAN IP (the IP other devices on the network can reach)."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        return s.getsockname()[0]
+    except Exception:
+        return ""
+    finally:
+        s.close()
+
+
 @app.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request, error: str = "", success: str = ""):
     existing = cm.load_all_credentials()
@@ -461,7 +473,32 @@ async def settings_page(request: Request, error: str = "", success: str = ""):
         "nutrition_status":        _nutrition_status(),
         "athlete_profile":         sm.load_settings().get("athlete_profile") or {},
         "coach_memory":            mm.load_memory(),
+        "lan_ip":                  _get_local_ip(),
+        "app_port":                APP_PORT,
     })
+
+
+@app.post("/api/save-network-settings")
+async def api_save_network_settings(request: Request):
+    form = await request.form()
+    existing = sm.load_settings()
+    existing["lan_access"] = "lan_access" in form
+    sm.save_settings(existing)
+    return RedirectResponse("/settings?success=network_saved", status_code=303)
+
+
+@app.post("/api/restart")
+async def api_restart():
+    """Restart the app process to apply settings that require it (e.g. LAN access)."""
+    import os
+
+    def _do_restart():
+        import time
+        time.sleep(0.8)  # let the JSON response reach the browser first
+        os.execv(sys.executable, [sys.executable] + sys.argv)
+
+    threading.Thread(target=_do_restart, daemon=True).start()
+    return JSONResponse({"ok": True})
 
 
 # ---------------------------------------------------------------------------

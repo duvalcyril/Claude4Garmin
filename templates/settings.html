@@ -64,6 +64,10 @@
           <div class="banner banner-success" style="margin-bottom:20px;">✓ AI provider saved. Coach restarted with the new model.</div>
         {% endif %}
 
+        {% if success == "network_saved" %}
+          <div class="banner banner-success" style="margin-bottom:20px;">✓ Network setting saved. Restart the app for the change to take effect.</div>
+        {% endif %}
+
         <form method="POST" action="/api/credentials" class="settings-form">
 
           <div class="settings-2col">
@@ -161,6 +165,36 @@
             </div>
             <div style="margin-top:20px;">
               <button type="submit" class="btn-primary" style="min-width:180px;">Save &amp; Reconnect</button>
+            </div>
+          </div>
+        </form>
+
+        <!-- ── Network Access ─────────────────────────────────────── -->
+        <form method="POST" action="/api/save-network-settings" class="settings-form" style="margin-top:20px;">
+          <div class="settings-card">
+            <div class="form-section-title">Network Access</div>
+            <div style="display:flex; flex-direction:column; gap:14px; margin-top:16px;">
+              <label class="metric-label" style="font-size:13px;">
+                <input type="checkbox" name="lan_access"
+                       {% if data_settings.lan_access %}checked{% endif %}>
+                Allow access from other devices on your local network (phone, tablet)
+              </label>
+              {% if data_settings.lan_access and lan_ip %}
+              <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:12px 16px; font-size:13px; color:#166534; line-height:1.6;">
+                <strong>Open this URL on your phone:</strong><br>
+                <span style="font-family:monospace; font-size:15px; letter-spacing:.02em;">http://{{ lan_ip }}:{{ app_port }}</span>
+              </div>
+              {% elif data_settings.lan_access %}
+              <p style="font-size:12px; color:var(--muted);">LAN access is on but your local IP could not be detected.</p>
+              {% else %}
+              <p style="font-size:12px; color:var(--muted);">Only accessible from this computer. Enable to reach the app from your phone on the same WiFi.</p>
+              {% endif %}
+              <p style="font-size:12px; color:var(--muted);">⚠ Restart the app after changing this setting.</p>
+            </div>
+            <div style="margin-top:20px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+              <button type="submit" class="btn-primary" style="min-width:160px;">Save</button>
+              <button type="button" id="restart-app-btn" class="btn-ghost" onclick="restartApp()">↺ Restart app</button>
+              <span id="restart-status" style="font-size:13px; color:var(--muted);"></span>
             </div>
           </div>
         </form>
@@ -993,6 +1027,23 @@
           createPersonaBtn.disabled = false;
         }
       });
+    }
+
+    /* ── App restart ─────────────────────────────────────────────── */
+    async function restartApp() {
+      var btn    = document.getElementById("restart-app-btn");
+      var status = document.getElementById("restart-status");
+      btn.disabled = true;
+      btn.textContent = "Restarting\u2026";
+      if (status) { status.textContent = "Waiting for app to come back\u2026"; }
+      try { await fetch("/api/restart", { method: "POST" }); } catch {}
+      // Poll /health until the server is back, then reload
+      var poll = setInterval(async function() {
+        try {
+          var r = await fetch("/health");
+          if (r.ok) { clearInterval(poll); window.location.reload(); }
+        } catch {}
+      }, 1000);
     }
 
     /* ── Daily Digest test send ───────────────────────────────────── */

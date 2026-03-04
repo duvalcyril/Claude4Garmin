@@ -36,6 +36,8 @@ Settings structure (all keys with defaults):
   activity_detail_splits        bool  — fetch/cache lap splits per activity
   activity_detail_exercise_sets bool  — fetch/cache exercise sets (strength)
   activity_detail_power_zones   bool  — fetch/cache power zones (cycling)
+
+  lan_access                    bool  — bind server to 0.0.0.0 for LAN access (requires restart)
 """
 
 import json
@@ -86,6 +88,8 @@ DEFAULTS: dict = {
     "activity_detail_splits":        True,
     "activity_detail_exercise_sets": True,
     "activity_detail_power_zones":   True,
+    # Network
+    "lan_access": False,  # bind to 0.0.0.0 to allow phone/tablet access on same WiFi
 }
 
 
