@@ -923,13 +923,18 @@ html, body {
   /* Show the sidebar toggle button */
   .btn-sidebar-toggle { display: block; }
 
-  /* Shrink header items to fit smaller screens */
+  /* Header: icon-only buttons to avoid wrapping onto two lines */
   .header { padding: 0 12px; }
   .header-title { font-size: 14px; }
-  .btn-ghost { font-size: 12px; padding: 4px 8px; }
+  .header-icon { display: none; }      /* hide ❤ to save space */
+  .btn-text { display: none; }         /* hide button labels — keep ↺ and ⚙ icons only */
+  .btn-ghost { font-size: 14px; padding: 6px 10px; }
 
-  /* Layout: remove the fixed sidebar width so chat is full-width */
-  .layout { position: relative; }
+  /* Layout: fill the true visible viewport.
+     100dvh (dynamic viewport height) adjusts as the mobile browser
+     chrome (address bar) shows/hides, keeping the input anchored at
+     the bottom. Falls back to 100vh on older browsers. */
+  .layout { position: relative; height: 100dvh; }
 
   /* Sidebar: slide-in overlay from the left */
   .sidebar {
