@@ -474,6 +474,16 @@ async def health():
     return JSONResponse({"status": "ok"})
 
 
+@app.get("/api/sidebar-html", response_class=HTMLResponse)
+async def api_sidebar_html(request: Request):
+    """Return the rendered sidebar partial for in-place DOM refresh (no page reload)."""
+    return templates.TemplateResponse("sidebar_content.html", {
+        "request":        request,
+        "health_data":    health_data,
+        "nutrition_data": nutrition_data,
+    })
+
+
 @app.get("/api/status")
 async def api_status():
     return JSONResponse({

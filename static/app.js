@@ -256,6 +256,22 @@ async function resetConversation() {
   appendMessage("coach", "Conversation reset. What would you like to explore?");
 }
 
+// ── Sidebar tab switching ─────────────────────────────────────────────
+
+function initTabs() {
+  document.querySelectorAll(".sidebar-tab").forEach(function(tab) {
+    tab.addEventListener("click", function() {
+      document.querySelectorAll(".sidebar-tab").forEach(function(t) { t.classList.remove("active"); });
+      document.querySelectorAll(".tab-panel").forEach(function(p) { p.classList.remove("active"); });
+      tab.classList.add("active");
+      var panel = document.getElementById(tab.dataset.tab);
+      if (panel) panel.classList.add("active");
+    });
+  });
+}
+
+initTabs();
+
 // ── Refresh Garmin data ───────────────────────────────────────────────
 
 async function refreshData() {
@@ -266,12 +282,20 @@ async function refreshData() {
   const res = await fetch("/api/refresh", { method: "POST" });
   const data = await res.json();
 
+  refreshBtn.textContent = "↺ Refresh data";
+  refreshBtn.disabled = false;
+
   if (data.ok) {
-    // Reload the page so the sidebar shows fresh data
-    window.location.reload();
+    // Fetch fresh sidebar HTML and swap it in — no page reload, conversation preserved
+    try {
+      const html = await fetch("/api/sidebar-html").then(r => r.text());
+      document.getElementById("sidebar").innerHTML = html;
+      initTabs();  // re-bind tab click handlers on the new DOM nodes
+    } catch {
+      // Sidebar update failed — data is still fresh on the server side
+    }
+    appendMessage("coach", "✓ Garmin data refreshed.");
   } else {
-    refreshBtn.textContent = "↺ Refresh data";
-    refreshBtn.disabled = false;
     appendMessage("coach", `⚠ Refresh failed: ${data.error || "Unknown error"}`);
   }
 }
