@@ -278,6 +278,7 @@ async function refreshData() {
     } catch {
       // Sidebar update failed — data is still fresh on the server side
     }
+    closeSidebar();
     appendMessage("coach", "✓ Garmin data refreshed.");
   } else {
     appendMessage("coach", `⚠ Refresh failed: ${data.error || "Unknown error"}`);
@@ -329,6 +330,20 @@ inputEl.addEventListener("keydown", (e) => {
 
 // Focus input on load
 inputEl.focus();
+
+// ── Mobile sidebar toggle ─────────────────────────────────────────
+
+const sidebarToggleBtn = document.getElementById("btn-sidebar-toggle");
+const sidebarBackdrop  = document.getElementById("sidebar-backdrop");
+const sidebarEl        = document.getElementById("sidebar");
+
+function openSidebar()  { sidebarEl.classList.add("sidebar-open");    sidebarBackdrop.classList.add("active"); }
+function closeSidebar() { sidebarEl.classList.remove("sidebar-open"); sidebarBackdrop.classList.remove("active"); }
+
+sidebarToggleBtn.addEventListener("click", () => {
+  sidebarEl.classList.contains("sidebar-open") ? closeSidebar() : openSidebar();
+});
+sidebarBackdrop.addEventListener("click", closeSidebar);
 
 // ── Sidebar tab switching (event delegation — survives sidebar HTML swaps) ──
 
