@@ -242,6 +242,7 @@ async function sendMessage() {
     setInputDisabled(false);
     inputEl.focus();
     scrollToBottom();
+    refreshTokenUsage();
   }
 }
 
@@ -330,6 +331,55 @@ inputEl.addEventListener("keydown", (e) => {
 
 // Focus input on load
 inputEl.focus();
+
+// ── Token usage monitor ───────────────────────────────────────────
+
+const tokenMonitorEl = document.getElementById("token-monitor");
+const tokenToggleBtn = document.getElementById("token-monitor-toggle");
+const tokenBodyEl    = document.getElementById("token-monitor-body");
+const tokenArrowEl   = document.getElementById("token-arrow");
+const tokenQuickEl   = document.getElementById("token-quick");
+
+function fmtTokens(n) {
+  if (n == null || n === 0) return "-";
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
+  if (n >= 1000) return (n / 1000).toFixed(1) + "k";
+  return String(n);
+}
+
+function updateTokenUI(data) {
+  if (!data || !data.today) return;
+  tokenMonitorEl.hidden = false;
+
+  const t = data.today;
+  tokenQuickEl.textContent = `Today: ${fmtTokens(t.input + t.output)} tokens, ${t.calls} calls` +
+    (t.cache_read ? ` (${fmtTokens(t.cache_savings_tokens)} saved by cache)` : "");
+
+  for (const [period, key] of [["today", "today"], ["week", "week"], ["month", "month"]]) {
+    const d = data[key];
+    document.getElementById(`tu-${period}-in`).textContent    = fmtTokens(d.input);
+    document.getElementById(`tu-${period}-out`).textContent   = fmtTokens(d.output);
+    document.getElementById(`tu-${period}-cache`).textContent = fmtTokens(d.cache_read);
+    document.getElementById(`tu-${period}-saved`).textContent = fmtTokens(d.cache_savings_tokens);
+    document.getElementById(`tu-${period}-calls`).textContent = d.calls || "-";
+  }
+}
+
+function refreshTokenUsage() {
+  fetch("/api/token-usage")
+    .then(r => r.json())
+    .then(updateTokenUI)
+    .catch(() => {});
+}
+
+tokenToggleBtn.addEventListener("click", () => {
+  const open = tokenBodyEl.hidden;
+  tokenBodyEl.hidden = !open;
+  tokenArrowEl.classList.toggle("open", open);
+});
+
+// Load on page init and refresh after each chat message
+refreshTokenUsage();
 
 // ── Mobile sidebar toggle ─────────────────────────────────────────
 

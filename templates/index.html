@@ -64,6 +64,27 @@
         </div>
       </div>
 
+      <!-- Token usage monitor (collapsible) -->
+      <div class="token-monitor" id="token-monitor" hidden>
+        <button class="token-monitor-toggle" id="token-monitor-toggle">
+          <span class="token-monitor-label">Token Usage</span>
+          <span class="token-monitor-quick" id="token-quick"></span>
+          <span class="token-monitor-arrow" id="token-arrow">&#9660;</span>
+        </button>
+        <div class="token-monitor-body" id="token-monitor-body" hidden>
+          <table class="token-table">
+            <thead>
+              <tr><th></th><th>Input</th><th>Output</th><th>Cached</th><th>Saved</th><th>Calls</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Today</td><td id="tu-today-in">-</td><td id="tu-today-out">-</td><td id="tu-today-cache">-</td><td id="tu-today-saved">-</td><td id="tu-today-calls">-</td></tr>
+              <tr><td>7 days</td><td id="tu-week-in">-</td><td id="tu-week-out">-</td><td id="tu-week-cache">-</td><td id="tu-week-saved">-</td><td id="tu-week-calls">-</td></tr>
+              <tr><td>30 days</td><td id="tu-month-in">-</td><td id="tu-month-out">-</td><td id="tu-month-cache">-</td><td id="tu-month-saved">-</td><td id="tu-month-calls">-</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <!-- Input area -->
       <div class="input-area">
 

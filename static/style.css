@@ -312,6 +312,80 @@ html, body {
 }
 @keyframes blink { 50% { opacity: 0; } }
 
+/* ── Token usage monitor ──────────────────────────────────────────── */
+.token-monitor {
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 11px;
+}
+
+.token-monitor-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 20px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 11px;
+  font-family: inherit;
+  transition: color .15s;
+}
+.token-monitor-toggle:hover { color: var(--text); }
+
+.token-monitor-label {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  font-size: 10px;
+}
+
+.token-monitor-quick {
+  flex: 1;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+}
+
+.token-monitor-arrow {
+  font-size: 8px;
+  transition: transform .2s;
+}
+.token-monitor-arrow.open { transform: rotate(180deg); }
+
+.token-monitor-body {
+  padding: 0 20px 8px;
+}
+
+.token-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.token-table th {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--muted);
+  text-align: right;
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--border);
+}
+.token-table th:first-child { text-align: left; }
+.token-table td {
+  padding: 3px 6px;
+  text-align: right;
+  color: var(--text);
+}
+.token-table td:first-child {
+  text-align: left;
+  font-weight: 500;
+  color: var(--muted);
+}
+
 /* ── Input area ───────────────────────────────────────────────────── */
 .input-area {
   border-top: 1px solid var(--border);

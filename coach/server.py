@@ -42,6 +42,7 @@ from . import nutrition_parser as np_
 from . import settings_manager as sm
 from . import skills_manager as skm
 from . import memory_manager as mm
+from . import token_tracker as tt
 from .garmin_client import get_garmin_client, fetch_health_data, format_health_summary, format_trend_summary
 from .claude_client import ClaudeCoach
 from .paths import bundle_dir, user_data_dir
@@ -649,6 +650,12 @@ async def api_extract_memory_now():
         asyncio.create_task(_extract_memory_background(coach))
         return JSONResponse({"ok": True, "message": "Extraction started in background."})
     return JSONResponse({"ok": False, "message": "Not enough new conversation turns to extract yet."})
+
+
+@app.get("/api/token-usage")
+async def api_token_usage():
+    """Return aggregated token usage stats for the frontend monitor."""
+    return JSONResponse(tt.get_usage_summary())
 
 
 @app.get("/api/activity-detail/{activity_id}")

@@ -18,6 +18,8 @@ from pathlib import Path
 
 from anthropic import Anthropic, AsyncAnthropic
 
+from . import token_tracker as tt
+
 MODEL = "claude-sonnet-4-6"
 
 # Max tokens per response — enough for detailed coaching advice without being verbose
@@ -25,9 +27,9 @@ MAX_TOKENS = 4096
 
 # History compression: keep the active (API-sent) window small to control token cost.
 # Turns beyond ARCHIVE_TRIGGER are moved to a side-car archive file in batches.
-MAX_ACTIVE_TURNS = 60   # target size after archiving
-ARCHIVE_TRIGGER  = 80   # archive fires when history grows past this
-ARCHIVE_BATCH    = 20   # turns moved per archive pass
+MAX_ACTIVE_TURNS = 30   # target size after archiving
+ARCHIVE_TRIGGER  = 40   # archive fires when history grows past this
+ARCHIVE_BATCH    = 10   # turns moved per archive pass
 
 
 class ClaudeCoach:
@@ -149,6 +151,27 @@ Use this data to answer questions and give personalized recommendations."""
     def active_persona(self) -> bool:
         return self._persona_content is not None
 
+    def _cached_system(self) -> list[dict]:
+        """Return system prompt as a content block with prompt caching enabled."""
+        return [
+            {
+                "type": "text",
+                "text": self.system_prompt,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ]
+
+    @staticmethod
+    def _record_usage(usage, model: str = MODEL) -> None:
+        """Extract token counts from an API response and log them."""
+        tt.record_usage(
+            input_tokens=getattr(usage, "input_tokens", 0),
+            output_tokens=getattr(usage, "output_tokens", 0),
+            cache_creation_tokens=getattr(usage, "cache_creation_input_tokens", 0),
+            cache_read_tokens=getattr(usage, "cache_read_input_tokens", 0),
+            model=model,
+        )
+
     def chat(self, user_message: str) -> str:
         """
         Send a user message, get a response, and update history.
@@ -161,10 +184,11 @@ Use this data to answer questions and give personalized recommendations."""
         response = self.client.messages.create(
             model=MODEL,
             max_tokens=MAX_TOKENS,
-            system=self.system_prompt,
+            system=self._cached_system(),
             messages=self.history,
         )
 
+        self._record_usage(response.usage)
         reply = response.content[0].text
         self.history.append({"role": "assistant", "content": reply})
         self._save_history()
@@ -180,12 +204,14 @@ Use this data to answer questions and give personalized recommendations."""
         with self.client.messages.stream(
             model=MODEL,
             max_tokens=MAX_TOKENS,
-            system=self.system_prompt,
+            system=self._cached_system(),
             messages=self.history,
         ) as stream:
             for chunk in stream.text_stream:
                 full_reply += chunk
                 yield chunk
+            final = stream.get_final_message()
+            self._record_usage(final.usage)
         self.history.append({"role": "assistant", "content": full_reply})
         self._save_history()
 
@@ -203,12 +229,14 @@ Use this data to answer questions and give personalized recommendations."""
         async with self.async_client.messages.stream(
             model=MODEL,
             max_tokens=MAX_TOKENS,
-            system=self.system_prompt,
+            system=self._cached_system(),
             messages=self.history,
         ) as stream:
             async for chunk in stream.text_stream:
                 full_reply += chunk
                 yield chunk
+            final = await stream.get_final_message()
+            self._record_usage(final.usage)
         # Replace the stored user message with the clean version if provided
         if display_message is not None:
             self.history[-1]["content"] = display_message
