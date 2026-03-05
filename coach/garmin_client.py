@@ -626,87 +626,75 @@ def format_health_summary(
         lines.append(f"TRAINING STATUS: {ts['label']} (as of {ts['date']})")
         lines.append("")
 
-    # ── Daily stats ───────────────────────────────────────────────────────────
-    if health_data.get("daily_stats") or health_data.get("hrv") or health_data.get("training_readiness"):
-        lines.append("DAILY STATS (most recent first):")
-
-        # Build lookup dicts for HRV and readiness keyed by date
+    # ── Daily stats + sleep (compact table: one row per day) ─────────────────
+    has_daily = health_data.get("daily_stats") or health_data.get("hrv") or health_data.get("training_readiness")
+    has_sleep = health_data.get("sleep")
+    if has_daily or has_sleep:
+        # Build lookup dicts keyed by date
+        daily_by_date = {e["date"]: e for e in health_data.get("daily_stats", [])}
         hrv_by_date = {e["date"]: e for e in health_data.get("hrv", [])}
         readiness_by_date = {e["date"]: e for e in health_data.get("training_readiness", [])}
+        sleep_by_date = {e["date"]: e for e in health_data.get("sleep", [])}
 
-        # Use daily_stats as the primary loop driver; fall back to HRV dates
+        # Collect dates in order, limited to days_back window
+        days_back_limit = int(s.get("days_back", DAYS_BACK))
+        cutoff = (date.today() - timedelta(days=days_back_limit)).isoformat()
         all_dates = []
         seen = set()
-        for e in health_data.get("daily_stats", []):
-            if e["date"] not in seen:
-                all_dates.append(e["date"])
-                seen.add(e["date"])
-        # Ensure any HRV-only dates are included too
-        for e in health_data.get("hrv", []):
-            if e["date"] not in seen:
-                all_dates.append(e["date"])
-                seen.add(e["date"])
+        for src in (health_data.get("daily_stats", []),
+                     health_data.get("hrv", []),
+                     health_data.get("sleep", [])):
+            for e in src:
+                if e["date"] not in seen and e["date"] >= cutoff:
+                    all_dates.append(e["date"])
+                    seen.add(e["date"])
 
-        daily_by_date = {e["date"]: e for e in health_data.get("daily_stats", [])}
+        # Build header — only include columns for enabled metrics
+        cols = []  # (label, width, getter)
+        def _col(label, key, enabled_key, getter):
+            if s.get(enabled_key, True):
+                cols.append((label, getter))
+        _col("Steps", "steps", "metric_steps", lambda d, **_: f"{d['steps']:,}" if d.get("steps") else "-")
+        _col("Cal", "calories_total", "metric_calories_total", lambda d, **_: str(int(d["calories_total"])) if d.get("calories_total") else "-")
+        _col("ActCal", "calories_active", "metric_calories_active", lambda d, **_: str(int(d["calories_active"])) if d.get("calories_active") else "-")
+        _col("Stress", "stress_avg", "metric_stress", lambda d, **_: str(d["stress_avg"]) if d.get("stress_avg") else "-")
+        _col("BB", "body_battery", "metric_body_battery", lambda d, **_: str(d["body_battery"]) if d.get("body_battery") else "-")
+        _col("RHR", "resting_hr", "metric_resting_hr", lambda d, **_: str(d["resting_hr"]) if d.get("resting_hr") else "-")
+        _col("Dist", "distance_m", "metric_distance", lambda d, **_: f"{d['distance_m']/1000:.1f}km" if d.get("distance_m") else "-")
+        if s.get("hrv_enabled", True):
+            cols.append(("HRV", lambda d, h=None, **_: (
+                str(int(h['last_night_avg'])) + (f"({h['status'][:3].title()})" if h.get("status") else "")
+            ) if h and h.get("last_night_avg") else "-"))
+        if s.get("training_readiness_enabled", True):
+            def _ready_val(d, r=None, **_):
+                if not r or r.get("score") is None:
+                    return "-"
+                lbl = READINESS_LEVEL_LABELS.get(r.get("level", ""), "")
+                return f"{r['score']}({lbl})" if lbl else str(r["score"])
+            cols.append(("Ready", _ready_val))
+        # Sleep columns
+        if has_sleep:
+            _col("Sleep", "total_seconds", "metric_sleep_total", lambda d, sl=None, **_: _seconds_to_hm(sl["total_seconds"]) if sl and sl.get("total_seconds") else "-")
+            _col("Deep", "deep_seconds", "metric_sleep_deep", lambda d, sl=None, **_: _seconds_to_hm(sl["deep_seconds"]) if sl and sl.get("deep_seconds") else "-")
+            _col("REM", "rem_seconds", "metric_sleep_rem", lambda d, sl=None, **_: _seconds_to_hm(sl["rem_seconds"]) if sl and sl.get("rem_seconds") else "-")
+            _col("SlpSc", "score", "metric_sleep_score", lambda d, sl=None, **_: str(sl["score"]) if sl and sl.get("score") else "-")
+
+        lines.append("DAILY DATA (most recent first):")
+        header = "  Date       | " + " | ".join(label for label, _ in cols)
+        lines.append(header)
 
         for date_str in all_dates:
-            day = daily_by_date.get(date_str, {"date": date_str})
-            if "error" in day:
-                lines.append(f"  {date_str}: [data unavailable]")
-                continue
-
-            parts = [f"  {date_str}:"]
-            if s.get("metric_steps", True) and day.get("steps") is not None:
-                parts.append(f"{day['steps']:,} steps")
-            if s.get("metric_calories_total", True) and day.get("calories_total") is not None:
-                parts.append(f"{day['calories_total']:,} kcal")
-            if s.get("metric_calories_active", True) and day.get("calories_active") is not None:
-                parts.append(f"{day['calories_active']:,} active kcal")
-            if s.get("metric_stress", True) and day.get("stress_avg") is not None:
-                parts.append(f"stress {day['stress_avg']}/100")
-            if s.get("metric_body_battery", True) and day.get("body_battery") is not None:
-                parts.append(f"body battery {day['body_battery']}%")
-            if s.get("metric_resting_hr", True) and day.get("resting_hr") is not None:
-                parts.append(f"RHR {day['resting_hr']} bpm")
-            if s.get("metric_distance", True) and day.get("distance_m") is not None:
-                parts.append(f"{day['distance_m'] / 1000:.1f} km")
-
-            # HRV for this day
+            day = daily_by_date.get(date_str, {})
             hrv = hrv_by_date.get(date_str, {})
-            if s.get("hrv_enabled", True) and hrv.get("last_night_avg") is not None:
-                status_str = f" ({hrv['status'].title()})" if hrv.get("status") else ""
-                parts.append(f"HRV {hrv['last_night_avg']} ms{status_str}")
-
-            # Training readiness for this day
             rdy = readiness_by_date.get(date_str, {})
-            if s.get("training_readiness_enabled", True) and rdy.get("score") is not None:
-                level_str = READINESS_LEVEL_LABELS.get(rdy.get("level", ""), rdy.get("level", ""))
-                rec_str = f", {rdy['recovery_time_h']}h recovery" if rdy.get("recovery_time_h") else ""
-                parts.append(f"readiness {rdy['score']}/100 ({level_str}{rec_str})")
-
-            lines.append(" | ".join(parts))
-        lines.append("")
-
-    # ── Sleep ─────────────────────────────────────────────────────────────────
-    if health_data.get("sleep"):
-        lines.append("SLEEP (most recent first):")
-        for entry in health_data["sleep"]:
-            if "error" in entry or not entry.get("total_seconds"):
-                lines.append(f"  {entry['date']}: [no data]")
+            slp = sleep_by_date.get(date_str, {})
+            if day.get("error"):
+                lines.append(f"  {date_str} | [unavailable]")
                 continue
-
-            parts = [f"  {entry['date']}:"]
-            if s.get("metric_sleep_total", True):
-                parts.append(_seconds_to_hm(entry["total_seconds"]) + " total")
-            if s.get("metric_sleep_deep", True) and entry.get("deep_seconds"):
-                parts.append("deep " + _seconds_to_hm(entry["deep_seconds"]))
-            if s.get("metric_sleep_rem", True) and entry.get("rem_seconds"):
-                parts.append("REM " + _seconds_to_hm(entry["rem_seconds"]))
-            if s.get("metric_sleep_light", True) and entry.get("light_seconds"):
-                parts.append("light " + _seconds_to_hm(entry["light_seconds"]))
-            if s.get("metric_sleep_score", True) and entry.get("score") is not None:
-                parts.append(f"score {entry['score']}/100")
-            lines.append(" | ".join(parts))
+            vals = []
+            for _, getter in cols:
+                vals.append(getter(day, h=hrv, r=rdy, sl=slp))
+            lines.append(f"  {date_str} | " + " | ".join(vals))
         lines.append("")
 
     # ── Activities ────────────────────────────────────────────────────────────
@@ -773,8 +761,11 @@ def format_health_summary(
 
     # ── Body Composition ──────────────────────────────────────────────────────
     if health_data.get("body_composition") and s.get("body_enabled", True):
+        body_cutoff = (date.today() - timedelta(days=int(s.get("days_back", DAYS_BACK)))).isoformat()
         lines.append("BODY COMPOSITION (most recent first):")
         for entry in health_data["body_composition"]:
+            if entry.get("date", "") < body_cutoff:
+                continue
             parts = [f"  {entry['date']}:"]
             if s.get("metric_body_weight", True) and entry.get("weight_kg") is not None:
                 parts.append(f"{entry['weight_kg']} kg")

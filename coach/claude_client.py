@@ -27,8 +27,8 @@ MAX_TOKENS = 4096
 
 # History compression: keep the active (API-sent) window small to control token cost.
 # Turns beyond ARCHIVE_TRIGGER are moved to a side-car archive file in batches.
-MAX_ACTIVE_TURNS = 30   # target size after archiving
-ARCHIVE_TRIGGER  = 40   # archive fires when history grows past this
+MAX_ACTIVE_TURNS = 20   # target size after archiving
+ARCHIVE_TRIGGER  = 30   # archive fires when history grows past this
 ARCHIVE_BATCH    = 10   # turns moved per archive pass
 
 
