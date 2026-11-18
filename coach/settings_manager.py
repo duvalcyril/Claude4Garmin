@@ -80,9 +80,8 @@ DEFAULTS: dict = {
     "digest_enabled": False,
     "digest_recipient": "",
     "digest_send_time": "07:00",
-    # AI Provider
-    "ai_provider": "claude",
-    "ai_model":    "claude-sonnet-4-6",
+    # AI model (validated against claude_client.SUPPORTED_MODELS when used)
+    "ai_model": "claude-sonnet-5-5",
     # Activity detail enrichments — fetched once per activityId, stored locally
     "activity_detail_hr_zones":      True,
     "activity_detail_splits":        True,

@@ -246,6 +246,19 @@ async function sendMessage() {
   }
 }
 
+// ── Restore saved conversation on page load ──────────────────────────
+
+async function loadHistory() {
+  try {
+    const data = await fetch("/api/history").then(r => r.json());
+    for (const m of data.messages || []) appendMessage(m.role, m.content);
+  } catch (err) {
+    console.warn("Could not load chat history:", err);
+  }
+}
+
+loadHistory();
+
 // ── Reset conversation ────────────────────────────────────────────────
 
 async function resetConversation() {

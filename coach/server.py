@@ -39,12 +39,13 @@ from . import activity_cache as ac
 from . import credentials_manager as cm
 from . import data_cache as dc
 from . import nutrition_parser as np_
+from . import mf_workouts as mfw
 from . import settings_manager as sm
 from . import skills_manager as skm
 from . import memory_manager as mm
 from . import token_tracker as tt
 from .garmin_client import get_garmin_client, fetch_health_data, format_health_summary, format_trend_summary
-from .claude_client import ClaudeCoach
+from .claude_client import ClaudeCoach, SUPPORTED_MODELS, resolve_model
 from .paths import bundle_dir, user_data_dir
 
 
@@ -74,6 +75,7 @@ health_summary: str | None = None
 health_data: dict | None = None
 nutrition_data: dict = {}
 nutrition_log: dict = {}
+workout_data: dict = {}       # MacroFactor strength sessions / program (workouts.json)
 garmin_connected: bool = False
 connection_error: str | None = None
 coach_memory: dict = {}       # loaded/updated by _connect() and memory extraction
@@ -81,28 +83,75 @@ activity_details: dict = {}   # keyed by activity_id; loaded/updated by _connect
 
 
 # ---------------------------------------------------------------------------
-# Coach factory — returns the right coach based on settings
+# Coach factory — builds the coach and its system prompt from module-level data
 # ---------------------------------------------------------------------------
 
-def _make_coach(health_summary: str, history_file: Path):
-    """Instantiate the coach configured in settings (Claude or Gemini)."""
-    settings = sm.load_settings()
-    provider = settings.get("ai_provider", "claude")
-    model    = settings.get("ai_model",    "claude-sonnet-4-6")
-    if provider == "gemini":
-        from .gemini_coach import GeminiCoach
-        api_key = cm.load_credential("gemini_api_key") or ""
-        if not api_key:
-            raise ValueError(
-                "Gemini API key not configured. Add it in Settings → Connection."
+def _build_health_summary(memory: dict, settings: dict | None = None) -> str:
+    """Format the system-prompt health summary from current module-level data."""
+    settings = settings if settings is not None else sm.load_settings()
+    return format_health_summary(
+        health_data, settings, nutrition_data, nutrition_log,
+        memory_notes=mm.format_memory_for_prompt(memory),
+        trend_summary=format_trend_summary(health_data),
+        workouts=workout_data,
+    )
+
+
+def _rebuild_coach() -> None:
+    """Recompute health_summary and recreate the coach from current module-level data.
+
+    Recreating picks up the configured model; an active persona carries over.
+    """
+    global health_summary, coach, coach_memory
+    if health_data is None:
+        return
+    settings       = sm.load_settings()
+    coach_memory   = mm.load_memory()
+    health_summary = _build_health_summary(coach_memory, settings)
+    persona        = coach.persona_content if coach else None
+    coach = ClaudeCoach(
+        health_summary=health_summary,
+        history_file=user_data_dir() / "chat_history_claude.json",
+        model=settings.get("ai_model"),
+    )
+    if persona is not None:
+        coach.set_persona(persona)
+
+
+def _refresh_coach_prompt(target_coach: ClaudeCoach, memory: dict) -> None:
+    """Rebuild an existing coach's system prompt in place (e.g. after a memory change)."""
+    global health_summary
+    if health_data is None:
+        return
+    health_summary = _build_health_summary(memory)
+    target_coach.update_health_summary(health_summary)
+
+
+def _nutrition_import_dir(settings: dict) -> str:
+    return (settings.get("nutrition_import_dir") or "").strip() or np_.default_import_dir()
+
+
+def _auto_import_nutrition(settings: dict) -> None:
+    """Import the newest MacroFactor export from the watched folder, if enabled and new."""
+    if not settings.get("nutrition_auto_import", True):
+        return
+    try:
+        result = np_.import_latest_from_folder(_nutrition_import_dir(settings))
+        if result:
+            print(
+                f"✓ Imported {result['file']} — {result['days_imported']} days of nutrition, "
+                f"{result['workout_sessions']} workouts."
             )
-        return GeminiCoach(
-            health_summary=health_summary,
-            history_file=history_file,
-            api_key=api_key,
-            model=model,
-        )
-    return ClaudeCoach(health_summary=health_summary, history_file=history_file)
+    except Exception as e:
+        print(f"✗ MacroFactor auto-import failed (non-fatal): {e}")
+
+
+def _reload_macrofactor() -> None:
+    """Reload nutrition, food log and workouts from disk into module-level state."""
+    global nutrition_data, nutrition_log, workout_data
+    nutrition_data = np_.load_nutrition()
+    nutrition_log  = np_.load_nutrition_log()
+    workout_data   = mfw.load_workouts()
 
 
 # ---------------------------------------------------------------------------
@@ -149,21 +198,10 @@ async def _connect() -> None:
         dc.save_cache(raw)
 
         health_data = raw
-        nutrition_data = np_.load_nutrition()
-        nutrition_log = np_.load_nutrition_log()
+        _auto_import_nutrition(settings)
+        _reload_macrofactor()
 
-        # Build trend summary and load persistent memory for system prompt injection
-        trend_summary = format_trend_summary(raw)
-        coach_memory  = mm.load_memory()
-        memory_notes  = mm.format_memory_for_prompt(coach_memory)
-
-        health_summary = format_health_summary(
-            raw, settings, nutrition_data, nutrition_log,
-            memory_notes=memory_notes,
-            trend_summary=trend_summary,
-        )
-        _provider = settings.get("ai_provider", "claude")
-        coach = _make_coach(health_summary, user_data_dir() / f"chat_history_{_provider}.json")
+        _rebuild_coach()
         garmin_connected = True
         connection_error = None
         print("✓ Connected to Garmin. Web server ready.")
@@ -197,7 +235,7 @@ async def _extract_memory_background(current_coach) -> None:
     Uses a snapshot of the coach object passed at task creation time — safe
     against coach being replaced by a concurrent _connect() call.
     """
-    global coach_memory, health_summary, coach
+    global coach_memory
 
     try:
         memory           = mm.load_memory()
@@ -207,19 +245,8 @@ async def _extract_memory_background(current_coach) -> None:
         coach_memory = updated
 
         # Rebuild system prompt in-place — only if coach hasn't been replaced
-        if coach is current_coach and health_data is not None:
-            settings      = sm.load_settings()
-            trend_summary = format_trend_summary(health_data)
-            memory_notes  = mm.format_memory_for_prompt(updated)
-            new_summary   = format_health_summary(
-                health_data, settings, nutrition_data, nutrition_log,
-                memory_notes=memory_notes,
-                trend_summary=trend_summary,
-            )
-            health_summary = new_summary
-            current_coach._base_system_prompt = current_coach._build_system_prompt(new_summary)
-            if not current_coach.active_persona:
-                current_coach.system_prompt = current_coach._base_system_prompt
+        if coach is current_coach:
+            _refresh_coach_prompt(current_coach, updated)
 
         note_count = len([
             l for l in (updated.get("notes") or "").splitlines()
@@ -436,7 +463,18 @@ def _nutrition_status() -> dict | None:
     if not data:
         return None
     dates = sorted(data.keys())
-    return {"days": len(data), "from": dates[0], "to": dates[-1]}
+    state = np_.load_import_state()
+    workouts = mfw.load_workouts()
+    sessions = workouts.get("sessions") or {}
+    return {
+        "days": len(data), "from": dates[0], "to": dates[-1],
+        "food_log_days": len(np_.load_nutrition_log()),
+        "workout_sessions": sum(len(v) for v in sessions.values()),
+        "last_workout": max(sessions) if sessions else None,
+        "program": (workouts.get("program") or {}).get("name"),
+        "last_file":   Path(state["file"]).name if state.get("file") else None,
+        "imported_at": state.get("imported_at"),
+    }
 
 
 def _get_local_ip() -> str:
@@ -464,14 +502,16 @@ async def settings_page(request: Request, error: str = "", success: str = ""):
         "error": error,
         "success": success,
         "data_settings": sm.load_settings(),
+        "ai_models":     SUPPORTED_MODELS,
+        "current_model": resolve_model(sm.load_settings().get("ai_model")),
         "skills": (_skills := skm.load_skills()),
         "persona_bodies": json.dumps({
             s["trigger"]: s.get("body", "") for s in _skills if s.get("type") == "persona"
         }),
         "has_digest_sender":       bool(cm.load_credential("digest_gmail_sender")),
         "has_digest_app_password": bool(cm.load_credential("digest_gmail_app_password")),
-        "has_gemini_key":          bool(cm.load_credential("gemini_api_key")),
         "nutrition_status":        _nutrition_status(),
+        "nutrition_import_dir":    _nutrition_import_dir(sm.load_settings()),
         "athlete_profile":         sm.load_settings().get("athlete_profile") or {},
         "coach_memory":            mm.load_memory(),
         "lan_ip":                  _get_local_ip(),
@@ -591,6 +631,19 @@ async def api_chat(body: ChatRequest):
     return StreamingResponse(generate(), media_type="text/event-stream")
 
 
+@app.get("/api/history")
+async def api_history():
+    """Return the active chat history so the page can restore it after navigation."""
+    if not coach:
+        return JSONResponse({"messages": []})
+    messages = [
+        {"role": "user" if t.get("role") == "user" else "coach", "content": t["content"]}
+        for t in coach.history
+        if isinstance(t.get("content"), str) and t["content"].strip()
+    ]
+    return JSONResponse({"messages": messages})
+
+
 @app.post("/api/reset")
 async def api_reset():
     if coach:
@@ -612,7 +665,7 @@ async def api_get_memory():
 @app.post("/api/memory")
 async def api_save_memory(request: Request):
     """Save manually edited coach memory notes and rebuild system prompt."""
-    global coach_memory, health_summary, coach
+    global coach_memory
     body  = await request.json()
     notes = (body.get("notes") or "").strip()
 
@@ -623,19 +676,8 @@ async def api_save_memory(request: Request):
     coach_memory = memory
 
     # Rebuild system prompt with updated notes
-    if coach and health_data is not None:
-        settings      = sm.load_settings()
-        trend_summary = format_trend_summary(health_data)
-        memory_notes  = mm.format_memory_for_prompt(memory)
-        new_summary   = format_health_summary(
-            health_data, settings, nutrition_data, nutrition_log,
-            memory_notes=memory_notes,
-            trend_summary=trend_summary,
-        )
-        health_summary = new_summary
-        coach._base_system_prompt = coach._build_system_prompt(new_summary)
-        if not coach.active_persona:
-            coach.system_prompt = coach._base_system_prompt
+    if coach:
+        _refresh_coach_prompt(coach, memory)
 
     return JSONResponse({"ok": True})
 
@@ -706,46 +748,40 @@ async def api_upload_skill(file: UploadFile = File(...)):
 
 @app.post("/api/upload-nutrition")
 async def api_upload_nutrition(file: UploadFile = File(...)):
-    """Parse a MacroFactor CSV, merge with existing nutrition data, rebuild coach."""
-    global nutrition_data, nutrition_log, health_summary, coach
+    """Parse a MacroFactor .xlsx/.csv export, merge with existing data, rebuild coach."""
     content = await file.read()
     try:
-        new_totals, new_log = np_.parse_csv(content)
+        result = np_.import_bytes(content, file.filename or "")
     except Exception as exc:
-        raise HTTPException(400, detail=f"Could not parse CSV: {exc}")
+        raise HTTPException(400, detail=f"Could not parse export: {exc}")
 
-    # Merge and persist daily totals
-    existing_totals = np_.load_nutrition()
-    merged_totals   = np_.merge_nutrition(existing_totals, new_totals)
-    np_.save_nutrition(merged_totals)
-    nutrition_data = merged_totals
-
-    # Merge and persist full food log
-    existing_log = np_.load_nutrition_log()
-    merged_log   = np_.merge_nutrition_log(existing_log, new_log)
-    np_.save_nutrition_log(merged_log)
-    nutrition_log = merged_log
-
-    # Rebuild coach context with updated nutrition data
+    _reload_macrofactor()
     if health_data:
-        settings      = sm.load_settings()
-        trend_summary = format_trend_summary(health_data)
-        memory_notes  = mm.format_memory_for_prompt(mm.load_memory())
-        health_summary = format_health_summary(
-            health_data, settings, nutrition_data, nutrition_log,
-            memory_notes=memory_notes,
-            trend_summary=trend_summary,
-        )
-        _provider = settings.get("ai_provider", "claude")
-        coach = _make_coach(health_summary, user_data_dir() / f"chat_history_{_provider}.json")
+        _rebuild_coach()
 
-    return JSONResponse({"ok": True, "days_imported": len(new_totals), "total_days": len(merged_totals)})
+    return JSONResponse({"ok": True, **result})
+
+
+@app.post("/api/nutrition-import-latest")
+async def api_nutrition_import_latest():
+    """Import the newest MacroFactor export from the watched folder (even if seen before)."""
+    folder = _nutrition_import_dir(sm.load_settings())
+    try:
+        result = np_.import_latest_from_folder(folder, force=True)
+    except Exception as exc:
+        raise HTTPException(400, detail=f"Could not parse export: {exc}")
+    if result is None:
+        raise HTTPException(404, detail=f"No MacroFactor .xlsx or .csv found in {folder}")
+
+    _reload_macrofactor()
+    if health_data:
+        _rebuild_coach()
+    return JSONResponse({"ok": True, **result})
 
 
 @app.post("/api/save-profile")
 async def api_save_profile(request: Request):
     """Save the athlete profile and rebuild the coach context."""
-    global health_summary, coach
     form = await request.form()
     settings = sm.load_settings()
     settings["athlete_profile"] = {
@@ -760,37 +796,24 @@ async def api_save_profile(request: Request):
     }
     sm.save_settings(settings)
     if health_data:
-        trend_summary = format_trend_summary(health_data)
-        memory_notes  = mm.format_memory_for_prompt(mm.load_memory())
-        health_summary = format_health_summary(
-            health_data, settings, nutrition_data, nutrition_log,
-            memory_notes=memory_notes,
-            trend_summary=trend_summary,
-        )
-        _provider = settings.get("ai_provider", "claude")
-        coach = _make_coach(health_summary, user_data_dir() / f"chat_history_{_provider}.json")
+        _rebuild_coach()
     return RedirectResponse("/settings?success=profile_saved#profile", status_code=303)
 
 
 @app.post("/api/nutrition-settings")
 async def api_save_nutrition_settings(request: Request):
     """Save nutrition AI-context toggles and rebuild coach with updated settings."""
-    global health_summary, coach
     form = await request.form()
     settings = sm.load_settings()
-    settings["nutrition_enabled"]     = "nutrition_enabled" in form
-    settings["nutrition_log_enabled"] = "nutrition_log_enabled" in form
+    settings["nutrition_enabled"]       = "nutrition_enabled" in form
+    settings["nutrition_log_enabled"]   = "nutrition_log_enabled" in form
+    settings["workouts_enabled"]        = "workouts_enabled" in form
+    settings["workout_program_enabled"] = "workout_program_enabled" in form
+    settings["nutrition_auto_import"]   = "nutrition_auto_import" in form
+    settings["nutrition_import_dir"]  = (form.get("nutrition_import_dir") or "").strip()
     sm.save_settings(settings)
     if health_data:
-        trend_summary = format_trend_summary(health_data)
-        memory_notes  = mm.format_memory_for_prompt(mm.load_memory())
-        health_summary = format_health_summary(
-            health_data, settings, nutrition_data, nutrition_log,
-            memory_notes=memory_notes,
-            trend_summary=trend_summary,
-        )
-        _provider = settings.get("ai_provider", "claude")
-        coach = _make_coach(health_summary, user_data_dir() / f"chat_history_{_provider}.json")
+        _rebuild_coach()
     return RedirectResponse("/settings?success=nutrition_settings_saved#nutrition", status_code=303)
 
 
@@ -892,7 +915,7 @@ async def api_save_data_settings(request: Request):
     form = await request.form()
 
     # Load-merge-save: preserves keys managed by other settings forms
-    # (athlete_profile, digest_*, ai_provider, etc.) that aren't in this form.
+    # (athlete_profile, digest_*, ai_model, etc.) that aren't in this form.
     existing = sm.load_settings()
     existing.update({
         "days_back": int(form.get("days_back", 7)),
@@ -936,16 +959,14 @@ async def api_save_data_settings(request: Request):
 
 @app.post("/api/ai-settings")
 async def api_save_ai_settings(request: Request):
-    """Save AI provider / model selection and reconnect the coach."""
+    """Save AI model selection and rebuild the coach."""
     form = await request.form()
     settings = sm.load_settings()
-    settings["ai_provider"] = form.get("ai_provider", "claude")
-    settings["ai_model"]    = form.get("ai_model",    "claude-sonnet-4-6")
+    settings["ai_model"] = resolve_model(form.get("ai_model"))
+    settings.pop("ai_provider", None)   # legacy key from the removed Gemini option
     sm.save_settings(settings)
-    if form.get("gemini_api_key"):
-        cm.save_credential("gemini_api_key", form["gemini_api_key"])
     if garmin_connected:
-        await _connect()
+        _rebuild_coach()
     return RedirectResponse("/settings?success=ai_saved", status_code=303)
 
 

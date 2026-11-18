@@ -309,7 +309,7 @@ def run_digest(target_date: date | None = None) -> None:
     today_context = _build_today_context(settings, target_date)
     prompt = DIGEST_PROMPT + today_context
 
-    raw_response = ClaudeCoach(health_summary=summary).chat(prompt)
+    raw_response = ClaudeCoach(health_summary=summary, model=settings.get("ai_model")).chat(prompt)
 
     # Parse structured JSON response; fall back gracefully if Claude doesn't comply
     try:

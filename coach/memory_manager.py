@@ -5,10 +5,14 @@ history using Claude Haiku and persists them to coach_memory.json. Notes are
 injected into the system prompt on every session so memory accumulates over time.
 
 Extraction is incremental: only turns since the last extraction are processed.
+The last processed turn is remembered by a content fingerprint rather than a
+list index, because ClaudeCoach archives old turns (and /api/reset clears them),
+which shifts every index and would otherwise stall extraction forever.
 Extraction is capped at EXTRACTION_MAX_NEW_TURNS to bound API cost.
 The extraction model is claude-haiku for speed and cost efficiency.
 """
 
+import hashlib
 import json
 from datetime import datetime
 from pathlib import Path
@@ -18,7 +22,7 @@ from anthropic import Anthropic
 from .paths import user_data_dir
 
 MEMORY_FILE = user_data_dir() / "coach_memory.json"
-EXTRACTION_MODEL = "claude-haiku-4-5-20251001"
+EXTRACTION_MODEL = "claude-haiku-5-5"
 EXTRACTION_MAX_TOKENS = 1024
 EXTRACTION_INTERVAL = 10       # extract when ≥10 new turns since last extraction
 EXTRACTION_MAX_NEW_TURNS = 40  # cap to bound token cost per extraction call
@@ -56,7 +60,8 @@ EXTRACTION_PROMPT = (
 def _default_memory() -> dict:
     return {
         "notes": "",
-        "last_extracted_from_turn": 0,
+        "last_extracted_from_turn": 0,   # legacy index; superseded by the marker
+        "last_extracted_marker": None,   # fingerprint of the last turn processed
         "last_updated": None,
     }
 
@@ -107,14 +112,41 @@ def format_memory_for_prompt(memory: dict) -> str:
 # Extraction logic
 # ---------------------------------------------------------------------------
 
+def _turn_fingerprint(turn: dict) -> str:
+    """Stable short hash identifying a history turn by role + content."""
+    raw = f"{turn.get('role', '')}|{turn.get('content') or ''}"
+    return hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
+
+
+def _unprocessed_turns(history: list, memory: dict) -> list:
+    """
+    Return the turns added since the last extraction pass.
+
+    Locates the last processed turn by fingerprint (searching from the end).
+    If it is no longer in the active window — archived away or history reset —
+    every turn currently in the window is new. Memories written before the
+    marker existed fall back to the legacy index, treating an out-of-range
+    index (the archiving bug) as "everything is new".
+    """
+    marker = memory.get("last_extracted_marker")
+    if marker:
+        for i in range(len(history) - 1, -1, -1):
+            if _turn_fingerprint(history[i]) == marker:
+                return history[i + 1:]
+        return list(history)
+
+    last_turn = memory.get("last_extracted_from_turn", 0) or 0
+    if 0 <= last_turn <= len(history):
+        return history[last_turn:]
+    return list(history)
+
+
 def should_extract(history: list, memory: dict) -> bool:
     """
     Return True if enough new conversation turns have accumulated
     to warrant running an extraction pass.
     """
-    last_turn = memory.get("last_extracted_from_turn", 0)
-    new_turns = len(history) - last_turn
-    return new_turns >= EXTRACTION_INTERVAL
+    return len(_unprocessed_turns(history, memory)) >= EXTRACTION_INTERVAL
 
 
 def extract_memory(history: list, memory: dict) -> dict:
@@ -123,15 +155,13 @@ def extract_memory(history: list, memory: dict) -> dict:
     the last extraction pass.
 
     Args:
-        history: Full conversation history (list of {role, content} dicts for
-                 Claude, or {role, parts} dicts for Gemini — both handled).
+        history: Full conversation history (list of {role, content} dicts).
         memory:  Current memory dict (loaded from disk).
 
     Returns:
         Updated memory dict (not yet saved — caller must call save_memory()).
     """
-    last_turn = memory.get("last_extracted_from_turn", 0)
-    new_turns = history[last_turn:]
+    new_turns = _unprocessed_turns(history, memory)
 
     # Cap to prevent runaway cost on very long catch-up extractions
     if len(new_turns) > EXTRACTION_MAX_NEW_TURNS:
@@ -144,10 +174,7 @@ def extract_memory(history: list, memory: dict) -> dict:
     segment_lines = []
     for turn in new_turns:
         role = "User" if turn.get("role") == "user" else "Coach"
-        # Handle both Claude format (content: str) and Gemini format (parts: list)
         content = turn.get("content") or ""
-        if not content and turn.get("parts"):
-            content = " ".join(p.get("text", "") for p in turn["parts"])
         # Truncate very long coach responses to keep tokens reasonable
         if len(content) > 800:
             content = content[:800] + "...[truncated]"
@@ -171,6 +198,7 @@ def extract_memory(history: list, memory: dict) -> dict:
 
     updated_memory = dict(memory)
     updated_memory["last_extracted_from_turn"] = len(history)
+    updated_memory["last_extracted_marker"]    = _turn_fingerprint(history[-1])
     updated_memory["last_updated"] = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     if result_text and result_text != "NO_NEW_FACTS":

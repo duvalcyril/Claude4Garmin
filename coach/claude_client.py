@@ -9,7 +9,8 @@ Key design decisions:
 - When a history_file path is supplied (web UI), history is persisted to disk
   and reloaded on the next startup so conversations survive server restarts.
   digest.py and the CLI omit history_file and always start fresh.
-- Model and token cap are module-level constants for easy tuning.
+- The token cap is a module-level constant; the model defaults to MODEL and
+  can be chosen per coach (Settings → AI Model) from SUPPORTED_MODELS.
 """
 
 import json
@@ -20,7 +21,24 @@ from anthropic import Anthropic, AsyncAnthropic
 
 from . import token_tracker as tt
 
-MODEL = "claude-sonnet-4-6"
+MODEL = "claude-sonnet-5-5"  # default; overridable per coach via Settings → AI Model
+
+# Models selectable in Settings → AI Model, as (model id, display label)
+SUPPORTED_MODELS: list[tuple[str, str]] = [
+    ("claude-sonnet-5-5", "Claude Sonnet 5.5 (recommended)"),
+    ("claude-opus-5-5",   "Claude Opus 5.5"),
+    ("claude-haiku-5-5",  "Claude Haiku 5.5"),
+]
+
+
+def resolve_model(model: str | None) -> str:
+    """Return model if it is a supported choice, else the default.
+
+    Guards against stale values in settings.json (e.g. retired Claude 4.x ids
+    or leftover Gemini model names from before the provider was removed).
+    """
+    supported = {m for m, _ in SUPPORTED_MODELS}
+    return model if model in supported else MODEL
 
 # Max tokens per response — enough for detailed coaching advice without being verbose
 MAX_TOKENS = 4096
@@ -43,9 +61,15 @@ class ClaudeCoach:
     reloaded on the next startup — so Claude remembers previous sessions.
     """
 
-    def __init__(self, health_summary: str, history_file: Path | None = None):
+    def __init__(
+        self,
+        health_summary: str,
+        history_file: Path | None = None,
+        model: str | None = None,
+    ):
         self.client = Anthropic()
         self.async_client = AsyncAnthropic()
+        self.model = resolve_model(model)
         self._history_file = history_file
         self.history: list[dict] = self._load_history()
         self._base_system_prompt = self._build_system_prompt(health_summary)
@@ -151,6 +175,18 @@ Use this data to answer questions and give personalized recommendations."""
     def active_persona(self) -> bool:
         return self._persona_content is not None
 
+    @property
+    def persona_content(self) -> str | None:
+        return self._persona_content
+
+    def update_health_summary(self, health_summary: str) -> None:
+        """Rebuild the base system prompt from a new summary, keeping any active persona."""
+        self._base_system_prompt = self._build_system_prompt(health_summary)
+        if self._persona_content is not None:
+            self.set_persona(self._persona_content)
+        else:
+            self.system_prompt = self._base_system_prompt
+
     def _cached_system(self) -> list[dict]:
         """Return system prompt as a content block with prompt caching enabled."""
         return [
@@ -161,15 +197,14 @@ Use this data to answer questions and give personalized recommendations."""
             }
         ]
 
-    @staticmethod
-    def _record_usage(usage, model: str = MODEL) -> None:
+    def _record_usage(self, usage) -> None:
         """Extract token counts from an API response and log them."""
         tt.record_usage(
             input_tokens=getattr(usage, "input_tokens", 0),
             output_tokens=getattr(usage, "output_tokens", 0),
             cache_creation_tokens=getattr(usage, "cache_creation_input_tokens", 0),
             cache_read_tokens=getattr(usage, "cache_read_input_tokens", 0),
-            model=model,
+            model=self.model,
         )
 
     def chat(self, user_message: str) -> str:
@@ -182,7 +217,7 @@ Use this data to answer questions and give personalized recommendations."""
         self.history.append({"role": "user", "content": user_message})
 
         response = self.client.messages.create(
-            model=MODEL,
+            model=self.model,
             max_tokens=MAX_TOKENS,
             system=self._cached_system(),
             messages=self.history,
@@ -202,7 +237,7 @@ Use this data to answer questions and give personalized recommendations."""
         self.history.append({"role": "user", "content": user_message})
         full_reply = ""
         with self.client.messages.stream(
-            model=MODEL,
+            model=self.model,
             max_tokens=MAX_TOKENS,
             system=self._cached_system(),
             messages=self.history,
@@ -227,7 +262,7 @@ Use this data to answer questions and give personalized recommendations."""
         self.history.append({"role": "user", "content": user_message})
         full_reply = ""
         async with self.async_client.messages.stream(
-            model=MODEL,
+            model=self.model,
             max_tokens=MAX_TOKENS,
             system=self._cached_system(),
             messages=self.history,

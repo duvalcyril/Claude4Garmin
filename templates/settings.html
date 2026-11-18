@@ -61,7 +61,7 @@
         {% endif %}
 
         {% if success == "ai_saved" %}
-          <div class="banner banner-success" style="margin-bottom:20px;">✓ AI provider saved. Coach restarted with the new model.</div>
+          <div class="banner banner-success" style="margin-bottom:20px;">✓ AI model saved. Coach rebuilt with the new model.</div>
         {% endif %}
 
         {% if success == "network_saved" %}
@@ -130,37 +130,18 @@
 
         </form>
 
-        <!-- ── AI Provider ──────────────────────────────────────────── -->
+        <!-- ── AI Model ────────────────────────────────────────────── -->
         <form method="POST" action="/api/ai-settings" class="settings-form" style="margin-top:20px;">
           <div class="settings-card">
-            <div class="form-section-title">AI Provider</div>
+            <div class="form-section-title">AI Model</div>
             <div style="display:flex; flex-direction:column; gap:16px; margin-top:16px;">
               <div class="form-group">
-                <label for="ai_provider">Provider</label>
-                <select id="ai_provider" name="ai_provider">
-                  <option value="claude" {% if data_settings.ai_provider != 'gemini' %}selected{% endif %}>Claude (Anthropic)</option>
-                  <option value="gemini" {% if data_settings.ai_provider == 'gemini' %}selected{% endif %}>Gemini (Google)</option>
-                </select>
-              </div>
-              <div class="form-group">
                 <label for="ai_model">Model</label>
-                <select id="ai_model" name="ai_model"></select>
-              </div>
-              <div class="form-group" id="gemini-key-group">
-                <label for="gemini_api_key">
-                  Google AI Studio Key
-                  {% if has_gemini_key %}
-                    <span class="field-status field-set">● set</span>
-                  {% else %}
-                    <span class="field-status field-missing">● not set</span>
-                  {% endif %}
-                </label>
-                <input type="password" id="gemini_api_key" name="gemini_api_key"
-                       placeholder="{% if has_gemini_key %}Leave blank to keep existing{% else %}AIza...{% endif %}"
-                       autocomplete="new-password" />
-                <p style="font-size:12px; color:var(--muted); margin-top:4px;">
-                  Get a free key at <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--accent);">aistudio.google.com</a>
-                </p>
+                <select id="ai_model" name="ai_model">
+                  {% for model_id, model_label in ai_models %}
+                  <option value="{{ model_id }}" {% if model_id == current_model %}selected{% endif %}>{{ model_label }}</option>
+                  {% endfor %}
+                </select>
               </div>
             </div>
             <div style="margin-top:20px;">
@@ -511,7 +492,7 @@
 
         <div class="settings-panel-header">
           <h1 class="settings-panel-title">Nutrition</h1>
-          <p class="settings-panel-desc">Upload a MacroFactor CSV export to add daily macro context to your coach. New uploads are merged with existing data — no duplicates.</p>
+          <p class="settings-panel-desc">Import a MacroFactor export (.xlsx with nutrition, food log and workouts, or the older .csv) to give your coach macro and lifting context. New imports are merged with existing data, so nothing is duplicated.</p>
         </div>
 
         {% if success == "nutrition_uploaded" %}
@@ -527,28 +508,63 @@
           <p style="font-size:13px; color:var(--text); margin-top:10px;">
             <strong>{{ nutrition_status.days }}</strong> days &mdash;
             {{ nutrition_status.from }} to {{ nutrition_status.to }}
+            {% if nutrition_status.food_log_days %}&middot; food log for {{ nutrition_status.food_log_days }} days{% endif %}
           </p>
+          {% if nutrition_status.workout_sessions %}
+          <p style="font-size:13px; color:var(--text); margin-top:6px;">
+            <strong>{{ nutrition_status.workout_sessions }}</strong> workouts (latest {{ nutrition_status.last_workout }})
+            {% if nutrition_status.program %}&middot; program: {{ nutrition_status.program }}{% endif %}
+          </p>
+          {% endif %}
+          {% if nutrition_status.last_file %}
+          <p style="font-size:12px; color:var(--muted); margin-top:6px;">
+            Last auto-import: {{ nutrition_status.last_file }} ({{ nutrition_status.imported_at }})
+          </p>
+          {% endif %}
         </div>
         {% endif %}
 
-        <!-- AI context toggles -->
+        <!-- AI context + auto-import settings -->
         <form method="POST" action="/api/nutrition-settings">
           <div class="settings-card" style="max-width:520px; margin-bottom:20px;">
             <div class="form-section-title">AI Context</div>
-            <p style="font-size:12px; color:var(--muted); margin-top:4px; margin-bottom:12px;">
-              Control how much nutrition data is sent to the AI. The food log is detailed but costs significantly more tokens per message.
-            </p>
-            <div style="display:flex; flex-direction:column; gap:10px;">
+            <div style="display:flex; flex-direction:column; gap:10px; margin-top:12px;">
               <label class="category-label">
                 <input type="checkbox" name="nutrition_enabled"
                        {% if data_settings.nutrition_enabled is not defined or data_settings.nutrition_enabled %}checked{% endif %}>
-                Include daily macro totals
+                Include daily calories, macros, expenditure &amp; weight
+              </label>
+              <label class="category-label">
+                <input type="checkbox" name="workouts_enabled"
+                       {% if data_settings.workouts_enabled is not defined or data_settings.workouts_enabled %}checked{% endif %}>
+                Include strength workouts (sets, loads, reps, RIR) &amp; sets per muscle group
+              </label>
+              <label class="category-label">
+                <input type="checkbox" name="workout_program_enabled"
+                       {% if data_settings.workout_program_enabled is not defined or data_settings.workout_program_enabled %}checked{% endif %}>
+                Include active training program template
               </label>
               <label class="category-label">
                 <input type="checkbox" name="nutrition_log_enabled"
-                       {% if data_settings.nutrition_log_enabled is not defined or data_settings.nutrition_log_enabled %}checked{% endif %}>
+                       {% if data_settings.nutrition_log_enabled %}checked{% endif %}>
                 Include full food log <span style="font-size:11px; color:var(--muted);">(high token cost)</span>
               </label>
+            </div>
+
+            <div class="form-section-title" style="margin-top:20px;">Auto-import</div>
+            <p style="font-size:12px; color:var(--muted); margin-top:4px; margin-bottom:12px;">
+              On startup and on every refresh, the newest <code>MacroFactor*.xlsx</code> (or <code>.csv</code>) in this folder is imported if it hasn't been already.
+              To pull from Google Drive, install Google Drive for Desktop and point this at the synced folder you export to.
+            </p>
+            <label class="category-label">
+              <input type="checkbox" name="nutrition_auto_import"
+                     {% if data_settings.nutrition_auto_import is not defined or data_settings.nutrition_auto_import %}checked{% endif %}>
+              Auto-import latest export
+            </label>
+            <input type="text" name="nutrition_import_dir" value="{{ nutrition_import_dir }}"
+                   style="width:100%; margin-top:10px;" placeholder="C:\Users\you\Downloads" />
+            <div style="margin-top:10px;">
+              <button type="button" class="btn-ghost" id="nutrition-import-latest">Import latest now</button>
             </div>
             <div style="margin-top:14px;">
               <button type="submit" class="btn-primary" style="min-width:140px;">Save</button>
@@ -558,13 +574,13 @@
 
         <!-- Upload card -->
         <div class="settings-card" style="max-width:520px;">
-          <div class="form-section-title">Import CSV</div>
+          <div class="form-section-title">Import file</div>
           <p style="font-size:12px; color:var(--muted); margin-top:4px;">
-            Export from MacroFactor → Profile → Export Data → CSV. Any date range works; data is merged automatically.
+            Export from MacroFactor and pick the .xlsx file (it includes workouts). Any date range works; data is merged automatically.
           </p>
           <div class="skill-upload-area" id="nutrition-upload-area" style="margin-top:12px;">
-            <span class="skill-upload-label">Drop a MacroFactor .csv file here, or click to browse</span>
-            <input type="file" id="nutrition-file-input" class="skill-file-input" accept=".csv" />
+            <span class="skill-upload-label">Drop a MacroFactor .xlsx or .csv file here, or click to browse</span>
+            <input type="file" id="nutrition-file-input" class="skill-file-input" accept=".xlsx,.csv" />
           </div>
           <div class="upload-status" id="nutrition-upload-status"></div>
         </div>
@@ -924,48 +940,6 @@
       if (file) uploadFile(file);
     });
 
-    /* ── AI provider switcher ────────────────────────────────────── */
-    var AI_MODELS = {
-      claude: [
-        { v: "claude-sonnet-4-6",        l: "Claude Sonnet 4.6 (recommended)" },
-        { v: "claude-opus-4-6",           l: "Claude Opus 4.6" },
-        { v: "claude-haiku-4-5-20251001", l: "Claude Haiku 4.5" },
-      ],
-      gemini: [
-        { v: "gemini-2.5-flash", l: "Gemini 2.5 Flash (recommended)" },
-        { v: "gemini-2.5-pro",   l: "Gemini 2.5 Pro" },
-        { v: "gemini-2.0-flash", l: "Gemini 2.0 Flash" },
-      ],
-    };
-    var _currentModel   = "{{ data_settings.ai_model | default('claude-sonnet-4-6') }}";
-    var _providerSel    = document.getElementById("ai_provider");
-    var _modelSel       = document.getElementById("ai_model");
-    var _geminiKeyGroup = document.getElementById("gemini-key-group");
-
-    function _populateModels(provider) {
-      if (!_modelSel) return;
-      _modelSel.innerHTML = "";
-      (AI_MODELS[provider] || []).forEach(function(opt) {
-        var o = document.createElement("option");
-        o.value = opt.v; o.textContent = opt.l;
-        if (opt.v === _currentModel) o.selected = true;
-        _modelSel.appendChild(o);
-      });
-    }
-
-    function _onProviderChange() {
-      if (!_providerSel) return;
-      var p = _providerSel.value;
-      if (_geminiKeyGroup) _geminiKeyGroup.style.display = (p === "gemini") ? "" : "none";
-      _populateModels(p);
-    }
-
-    if (_providerSel) {
-      _populateModels(_providerSel.value);
-      _onProviderChange();
-      _providerSel.addEventListener("change", _onProviderChange);
-    }
-
     /* ── Persona preview ─────────────────────────────────────────── */
     var PERSONA_BODIES    = {{ persona_bodies | safe }};
     var personaPreviewBox = document.getElementById("persona-preview-box");
@@ -1094,7 +1068,7 @@
         var data = await res.json();
         if (res.ok && data.ok) {
           setNutritionStatus(
-            "\u2713 " + data.days_imported + " days imported (" + data.total_days + " total) \u2014 reloading\u2026",
+            "\u2713 " + data.days_imported + " days of nutrition, " + data.workout_sessions + " workouts imported (" + data.total_days + " days total) \u2014 reloading\u2026",
             true
           );
           setTimeout(function() { window.location.reload(); }, 900);
@@ -1104,6 +1078,31 @@
       } catch (e) {
         setNutritionStatus("\u2717 Network error: " + e.message, false);
       }
+    }
+
+    var importLatestBtn = document.getElementById("nutrition-import-latest");
+    if (importLatestBtn) {
+      importLatestBtn.addEventListener("click", async function() {
+        importLatestBtn.disabled = true;
+        setNutritionStatus("Looking for the latest export…", true);
+        try {
+          var res  = await fetch("/api/nutrition-import-latest", { method: "POST" });
+          var data = await res.json();
+          if (res.ok && data.ok) {
+            setNutritionStatus(
+              "✓ " + data.file + ": " + data.days_imported + " days (" + data.from + " → " + data.to + "), " + data.workout_sessions + " workouts — reloading…",
+              true
+            );
+            setTimeout(function() { window.location.reload(); }, 1200);
+          } else {
+            setNutritionStatus("✗ " + (data.detail || "Import failed."), false);
+            importLatestBtn.disabled = false;
+          }
+        } catch (e) {
+          setNutritionStatus("✗ Network error: " + e.message, false);
+          importLatestBtn.disabled = false;
+        }
+      });
     }
 
     if (nutritionFileInput) {

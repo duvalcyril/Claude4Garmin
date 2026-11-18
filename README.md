@@ -34,7 +34,7 @@ On startup, the app connects to your Garmin Connect account, fetches your health
 - *"How is my body composition trending over the past month?"*
 - *"Analyze workout #1"* — gets a full breakdown with HR zones, lap splits, and exercise sets
 
-Claude maintains the full conversation history so follow-up questions work naturally. You can also switch to Google Gemini as the AI backend in Settings → Connection.
+Claude maintains the full conversation history so follow-up questions work naturally. You can choose between Claude Sonnet, Opus and Haiku in Settings → AI Model.
 
 ---
 
@@ -346,7 +346,6 @@ garmin-health-coach/
 │   ├── server.py                # FastAPI web server — all routes and API endpoints
 │   ├── garmin_client.py         # Garmin Connect auth, data fetching, formatting
 │   ├── claude_client.py         # Claude API wrapper with streaming, history, memory
-│   ├── gemini_coach.py          # Google Gemini AI alternative (same interface as Claude)
 │   ├── activity_cache.py        # Per-activity enrichment cache (HR zones, splits, sets)
 │   ├── data_cache.py            # Incremental 90-day Garmin data cache
 │   ├── memory_manager.py        # Extracts & persists key coaching facts from history
@@ -380,7 +379,6 @@ garmin-health-coach/
 │   ├── coach_memory.json        # Persistent coaching facts extracted from history
 │   ├── nutrition.json           # Parsed MacroFactor nutrition data
 │   ├── chat_history_claude.json # Claude conversation history
-│   ├── chat_history_gemini.json # Gemini conversation history
 │   ├── settings.json            # User settings (when running from source)
 │   ├── .garth_session/          # Garmin OAuth session tokens
 │   └── digest.log               # Daily digest run log

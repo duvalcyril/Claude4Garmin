@@ -562,6 +562,7 @@ def format_health_summary(
     nutrition_log: dict | None = None,
     memory_notes: str = "",
     trend_summary: str = "",
+    workouts: dict | None = None,
 ) -> str:
     """
     Convert raw Garmin data into a clean, readable text block.
@@ -792,18 +793,25 @@ def format_health_summary(
                 for d in sorted_dates:
                     n = nutrition_data[d]
                     parts = [f"  {d}:"]
-                    parts.append(f"{int(n['calories'])} kcal")
+                    if n.get("calories") is not None:
+                        parts.append(f"{int(n['calories'])} kcal")
+                    else:
+                        parts.append("no food logged")
                     if n.get("expenditure"):
                         parts.append(f"TDEE {n['expenditure']} kcal")
-                    parts.append(f"P {int(n['protein'])}g")
-                    parts.append(f"C {int(n['carbs'])}g")
-                    parts.append(f"F {int(n['fat'])}g")
+                    if n.get("calories") is not None:
+                        parts.append(f"P {int(n.get('protein', 0))}g")
+                        parts.append(f"C {int(n.get('carbs', 0))}g")
+                        parts.append(f"F {int(n.get('fat', 0))}g")
                     if n.get("fiber"):
                         parts.append(f"fiber {n['fiber']}g")
                     if n.get("alcohol"):
                         parts.append(f"alcohol {n['alcohol']}g")
-                    if n.get("weight"):
-                        parts.append(f"weight {n['weight']} kg")
+                    if n.get("weight") or n.get("trend_weight"):
+                        w = f"weight {n['weight']} kg" if n.get("weight") else "weight —"
+                        if n.get("trend_weight"):
+                            w += f" (trend {n['trend_weight']})"
+                        parts.append(w)
                     if n.get("target_calories"):
                         parts.append(
                             f"target {n['target_calories']} kcal"
@@ -815,7 +823,7 @@ def format_health_summary(
                 lines.append("")
 
         # Full food item log — detailed per-meal breakdown for Claude
-        if nutrition_log and s.get("nutrition_log_enabled", True):
+        if nutrition_log and s.get("nutrition_log_enabled", False):
             sorted_dates = sorted(nutrition_log.keys(), reverse=True)[:days_back]
             if sorted_dates:
                 lines.append("NUTRITION — Full Food Log (most recent first):")
@@ -833,5 +841,16 @@ def format_health_summary(
                             parts.append(f"fiber {item['fiber']}g")
                         lines.append(" | ".join(parts))
                 lines.append("")
+
+    # ── Strength training (MacroFactor workouts) ──────────────────────────────
+    if workouts and s.get("workouts_enabled", True):
+        from .mf_workouts import format_for_prompt
+        block = format_for_prompt(
+            workouts,
+            int(s.get("days_back", DAYS_BACK)),
+            include_program=s.get("workout_program_enabled", True),
+        )
+        if block:
+            lines.append(block)
 
     return "\n".join(lines)

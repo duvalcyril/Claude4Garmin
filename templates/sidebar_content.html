@@ -189,11 +189,15 @@
               {% set n = nutrition_data[d] %}
               <tr>
                 <td class="col-date">{{ d | fmt_date }}</td>
+                {% if n.calories is defined and n.calories is not none %}
                 <td>{{ n.calories | int }}</td>
                 <td>{{ n.protein | int }}g</td>
                 <td>{{ n.carbs | int }}g</td>
                 <td>{{ n.fat | int }}g</td>
                 <td>{{ n.fiber | round(1) if n.fiber else "—" }}</td>
+                {% else %}
+                <td colspan="5" style="color:var(--muted);">not logged</td>
+                {% endif %}
               </tr>
               {% endfor %}
             </tbody>
